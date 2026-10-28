@@ -1,0 +1,14 @@
+{
+  "name": "geoguide",
+  "private": true,
+  "description": "GeoGuessr teaching tool for South Africa regions",
+  "scripts": {
+    "build": "node scripts/build-config.js"
+  },
+  "dependencies": {
+    "@libsql/client": "^0.17.4"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}

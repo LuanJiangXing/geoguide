@@ -1,0 +1,6590 @@
+/* === 设计系统变量 === */
+/* "野外手札" Field Journal — 探险家的野外笔记 */
+:root {
+  /* 原生控件（滚动条 / 下拉 / 日期选择器）跟随主题。深色那份在文件上方的
+     :root[data-theme="dark"] 里。少了这行，深色页面会拖一条亮滚动条。 */
+  color-scheme: light;
+  --soil-dark: #2d5a3d;
+  --soil-mid: #4a7c59;
+  --soil-light: #7ba887;
+  --paper-warm: #f5f0e3;
+  --paper-light: #fdfaf3;
+  --paper-card: #faf6ee;
+  --ink-charcoal: #2c2416;
+  --ink-faded: #7a7265;
+  --ink-subtle: #a0988a;
+  --earth-terracotta: #c4762b;
+  --earth-clay: #a85f30;
+  --border-warm: #d9d0bc;
+  --border-light: #e8e0d0;
+  --shadow-sm: 0 1px 3px rgba(44, 36, 22, 0.06);
+  --shadow-md: 0 3px 12px rgba(44, 36, 22, 0.10);
+  --shadow-lg: 0 8px 32px rgba(44, 36, 22, 0.16);
+  --radius: 4px;
+  --radius-sm: 3px;
+  /* 控件高度分档。⚠️ 今天两档同值(44px) = 与改造前渲染逐像素一致（已用几何快照核实）；
+     值在下一步才分开。分档表见 .trellis/spec/frontend/touch-targets.md */
+  --compact: 32px;   /* 密集列表里的次级控件 */
+  --mid: 36px;       /* 常规控件 */
+  --feedback-red: #c62828;
+  /* 语义绿。与 --feedback-red 成对：作**前景**用（成功文案），深色下要变亮。
+     当背景用的那组浅底绿（#e8f5e9 / #D4EDDA）是自带背景的徽章，深色下保持原样。 */
+  --feedback-green: #2e7d32;
+  --soil-rgb: 74, 124, 89;
+  /* 两条 rgb 三元组，专供「半透明叠加里的写死色」。rgba() 塞不进 var(--paper-warm) 这种
+     颜色值 —— 只能给裸三元组，所以这两处渐变一直是**写死的浅色**，深色下不会跟着翻转。
+     （症状：explore 底栏上深下浅、弹窗左栏那条装订线在深色下依然发亮。）
+     值逐字等于各自对应的令牌，所以引入它们不改变任何渲染。 */
+  --paper-warm-rgb: 245, 240, 227;
+  --border-warm-rgb: 217, 208, 188;
+  --font-display: Georgia, "Noto Serif", serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "JetBrains Mono", monospace;
+
+  /* --- 语义别名 ---
+     以下六个名字此前被 var() 引用但从未定义。后果分两种：没有兜底的（--paper）会让整条声明
+     在 computed-value 阶段失效、属性回到初始值（背景变透明）；有兜底的则静默退回离色系的
+     纯灰（#333 / #666 / #888）或纯白，与整套暖色大地色系不一致。
+     这里统一绑到色系内已有的实际令牌，名字保留是因为它们表达的是用途（ink=文字、surface=控件底）
+     而非材质。 */
+  --ink: var(--ink-charcoal);
+  --ink-muted: var(--ink-faded);
+  --surface: var(--paper-light);
+  --paper: var(--paper-light);
+  --paper-dark: var(--paper-warm);
+  --font-heading: var(--font-display);
+
+  /* --- Google 品牌蓝：仅供"会离开本站去 Google"的可供性使用 ---
+     .review-btn--streetview / .review-btn--exists / .sv-placeholder__link("Open in Google Maps ↗")
+     用它是在告诉用户"这会跳到 Google 街景/地图"。这是有意的，不要为了"配色统一"改成绿色 ——
+     那会抹掉这个语义。分两个值：#1a73e8 用于文字链接（对白底 4.6:1，过 AA），
+     #4285F4 用于白字按钮底。 */
+
+  /* --- 主题切换需要跟随的补充令牌 ---
+     这些值原先写死在各条规则里。提为令牌**只为**让 :root[data-theme="dark"] 能整体改写。
+     ⚠️ 每个令牌的值都**逐字等于原先的字面值**，所以引入它们不改变任何渲染 —— 由
+     test-style-parity 的 --compare 证明（改这里的值必须同步重跑它）。
+     ⚠️ 不是所有 #fff 都该提：地图控件（.map-* / .search-chip__toggle / .tag-filter__toggle）
+     与批量栏按钮上的白是「衬在浅色地图/彩底上」的，地图已决策保持浅色，它们必须保持白。 */
+  --surface-plain: #fff;   /* 页面级纯白面（弹窗、表单控件）。⚠️ 不含地图控件与彩色件上的白 —— 那些是「衬在浅色地图/彩底上」，深色下保持白 */
+  --surface-hover: #f0eee6;   /* 下拉项悬停面 */
+  --surface-sand: #d4c5b0;    /* 次级按钮悬停面 */
+  --ink-warm: #5a5240;        /* 提案弹窗的暖褐文字 */
+  /* --- 「填充色」与「填充上的文字」---
+     ⚠️ 这几个令牌是**为了深色模式才分出来的**，不是随手加的抽象。
+     --soil-dark 这类颜色同时被当两种相反的角色用：
+       作**正文色**（52 处）—— 深色下必须变亮，否则深字压深底；
+       作**按钮底**（12 处）—— 上面坐着白字，深色下必须保持够深，否则白字糊掉。
+     一个令牌只能是一个值，两种角色的需求正好相反。所以把「当背景用」的那部分拆到 --*-fill。
+     浅色下两组值**逐字相同**，所以这层拆分不改变任何渲染（由 test-style-parity --compare 证明）。
+     深色下 --*-fill **不覆盖**（保持原色，白字依然可读），只有作前景的那个变亮。 */
+  --soil-fill: #2d5a3d;
+  --soil-mid-fill: #4a7c59;
+  --red-fill: #c62828;
+  --terracotta-fill: #c4762b;
+  --ink-fill: #2c2416;
+  --on-fill: #fdfaf3;
+  --accent: #1a73e8;
+}
+/* 唯一的触屏例外层：主指针是**粗的**（手机 / 平板）时，两档一起抬到 44。
+   ⚠️ 跟的是输入设备，不是屏宽。下面那些 max-width 断点按「屏幕小」推「手指粗」，
+   在触屏笔记本和滚轮鼠标上都会推错 —— 尺寸声明因此不进断点，只放这里。
+   ⚠️ 用 `pointer: coarse`（主指针）而不是 `any-pointer: coarse`：后者在现代笔记本上
+   几乎恒真（都带触摸屏），等于又回到全站 44。代价是触屏笔记本以触控板为主时拿紧凑档，
+   这个取舍是有意的。 */
+@media (pointer: coarse) {
+  :root {
+    --compact: 44px;
+    --mid: 44px;
+  }
+}
+
+/* === 深色调色板 ===
+   ⚠️ 这里是全站**唯一**一处深色定义。CSS 里**没有** @media (prefers-color-scheme) ——
+   偏好由 js/theme.js 解析成具体主题后写到 <html data-theme>。把调色板写两遍
+   （一份给媒体查询、一份给属性选择器）是个必然漂移的同步点，本仓库已有
+   SOURCE_RULES 与 OSM 瓦片 URL（4 处）两个同类前车之鉴，不再加第三个。
+
+   设计取向：不是把浅色「反相」，而是同一本野外手札的**夜间版** —— 底色用暖黑而非冷灰，
+   保住纸张的材质感与「土壤 / 陶土」这套色系。所以不要把这些值换成 #000 / #111 / 纯灰。
+
+   ⚠️ 抬升关系必须保住：浅色下 --paper-light 比 --paper-warm **亮**（抬升面更亮）。
+   深色下这条关系不变 —— 抬升面依然比页面底亮一档，只是整体压到暗部。反了的话
+   弹窗/导航会「陷」进背景里。 */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* 表面 */
+  --paper-warm:  #16130f;   /* 页面底 */
+  --paper-card:  #1e1a15;   /* 卡片 */
+  --paper-light: #262019;   /* 抬升面：导航 / 弹窗 / 悬停 */
+
+  /* 文字 */
+  --ink-charcoal: #ece5d8;
+  --ink-faded:    #a89d8a;
+  --ink-subtle:   #7e7565;
+
+  /* 边框 */
+  --border-warm:  #3a342b;
+  --border-light: #2b2620;
+
+  /* 强调色 —— 这些**当前景用**，深色下必须变亮。
+     当背景用的那份走 --*-fill，在这里**故意不覆盖**（保持原色，白字依然可读）。*/
+  --soil-dark:        #82c79a;
+  --soil-mid:         #6fae87;
+  --soil-light:       #9ed4b1;
+  --earth-terracotta: #e6a25c;
+  --earth-clay:       #d18e5f;
+  --feedback-red:     #f08a8a;
+  --feedback-green:   #7fc98a;
+
+  /* rgba(var(--soil-rgb), …) 的叠加色 —— 跟着一起变亮 */
+  --soil-rgb: 130, 199, 154;
+  /* 同上，跟着各自的令牌换（浅色值见 :root） */
+  --paper-warm-rgb: 22, 19, 15;
+  --border-warm-rgb: 58, 52, 43;
+
+  /* 阴影：--shadow-* 原本是棕色 rgba(44,36,22,…)，在深底上既看不见又发脏 —— 换黑色系并加重。
+     （另有 31 处写死的 box-shadow 基本都是 rgba(0,0,0,…)，深色下依然成立，不动。） */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 3px 12px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.65);
+
+  /* Google 品牌蓝：语义是「这点下去会离开本站去 Google」。⚠️ 不得为了配色统一改成
+     绿色系 —— 那会抹掉这个可供性。这里只提亮一档以够上深底对比度。 */
+  --accent: #8ab4f8;
+
+  /* 本轮补充的令牌（浅色值见 :root，此处只覆盖需要翻转的） */
+  --surface-plain: #262019;
+  --surface-hover: #2e2820;
+  --surface-sand:  #3a332a;
+  --ink-warm:      #c9bfae;
+}
+
+/* === 断点清单 (Breakpoint inventory) ===
+   本文件目前有 23 个 @media 块（含末尾的 prefers-reduced-motion）。
+   新增响应式规则前先读这段，不要直接往文件末尾追加。
+
+   实际用到的断点：
+     400px   小屏手机
+     500px   手机（出现 7 次，是散落最严重的一档）
+     600px   大屏手机
+     620px   ┐
+     640px   │ 零散追加，各自只有一处
+     720px   │
+     760px   ┘
+     767px   平板
+     680px   平板/桌面交界；与下面的 681px 是同一断点的互补拆分
+     681px   min-width，配合 compare 视图（与 680px 成对，不要只改一边）
+     print   打印
+     hover:none + pointer:coarse   触屏设备（箭头常显）
+
+   ★ 顺序即语义：@media 块的先后顺序会影响渲染，不是排版问题。
+     max-width 断点之间存在包含关系（400 ⊂ 500 ⊂ 600 ⊂ …），窄屏下多个块同时生效，
+     此时块与块的先后决定谁覆盖谁。因此**不要把分散的同断点块合并到一起** ——
+     合并会让规则跨过中间的其他块，改变相对顺序。实测：把三处 `max-width: 600px`
+     合并到最早那处，会让 `.proposal-modal` 和 `#my-map` 被更早的顶层规则反超，
+     小屏下弹窗位置和地图高度都变了（宽度 94%→90%、top auto→50%、高度 350→420px）。
+
+     本轮只合并了两组经实测确认零差异的：`max-width: 680px`（2→1）与
+     `hover:none`（2→1）。`400px` / `500px` / `600px` 三组经静态分析存在真实属性冲突，
+     保持原状。
+
+   ★ 新增规则放哪里：找到**已经存在**的、最接近你目标的那个断点块，写进去。
+     需要新断点时，先确认它和现有断点不是重复（680/681 就是重复拆分的先例）。 */
+
+/* === 全局重置 === */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: var(--font-body);
+  color: var(--ink-charcoal);
+  background: var(--paper-warm);
+  overflow: hidden;
+}
+
+/* Full-screen app pages — body as flex column so nav + app-shell
+   fit viewport exactly, preventing mobile overscroll that would
+   push the page content behind the sticky nav. */
+body.app-page {
+  display: flex;
+  flex-direction: column;
+}
+body.app-page .app-shell {
+  flex: 1;
+  min-height: 0;
+  height: auto; /* override 100vh — height is driven by flex */
+}
+
+/* Pages that need scrolling */
+body.allow-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 锁定滚动（overflow:hidden）时仍保留滚动条槽位，避免弹窗开关时页面左右跳动 */
+  scrollbar-gutter: stable;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+
+/* === 探索页的搜索 / 标签筛选曾是这里的一条 `.toolbar` 窄带 ===
+   2026-09-18 整条退役:它们搬到了地图左上角的 `.map-tools` 浮层(见文件末尾那一块),
+   于是地图拿回了一条工具栏的高度,而浮层只在展开时才盖住地图。
+   随之消失的还有 `.toolbar` 的 `z-index: 1100` 那一层 —— 现在的地图浮层刻度是
+   `.map-tools` 1001(压过 Leaflet 的 1000) < `.nav` 1200 < 弹窗 1300/1301。 */
+
+/* === 地图容器 === */
+.map-shell {
+  flex: 1;
+  position: relative;
+  min-height: 320px;
+}
+
+#map { width: 100%; height: 100%; }
+
+/* === 加载错误 === */
+.load-error {
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 2000;
+}
+.load-error:not([hidden]) { display: flex; }
+
+.load-error__card {
+  background: var(--paper-light);
+  border-radius: var(--radius);
+  border: 1px solid var(--border-warm);
+  padding: 24px 32px;
+  box-shadow: var(--shadow-md);
+  text-align: center;
+}
+.load-error__card h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--soil-dark);
+  margin-bottom: 8px;
+}
+.load-error__card p {
+  font-size: 13px;
+  color: var(--ink-faded);
+}
+
+/* === 国家切换栏 — 书签式标签 === */
+.country-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border-top: 1px solid var(--border-warm);
+  /* 第二个色标原来是写死的 rgba(245,240,227,0.8) —— 正是浅色的 --paper-warm。深色下第一个色标
+     翻了、第二个没翻，渐变就成了「上深下浅」，栏里的国家字样压在浅的那半截上根本看不清。 */
+  background: linear-gradient(180deg, var(--paper-warm) 0%, rgba(var(--paper-warm-rgb), 0.8) 100%);
+  flex-shrink: 0;
+  padding: 0 8px;
+}
+.country-bar {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 0;
+  overflow-x: auto;
+  flex-wrap: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.country-bar::-webkit-scrollbar { display: none; }
+
+/* 左右滚动箭头 — 国家多时可点击滚动，箭头即“还有更多”提示。
+   位于滚动容器之外，滚动时保持固定，不随内容移动。 */
+.country-scroll {
+  flex-shrink: 0;
+  width: var(--compact);
+  height: var(--compact);
+  border-radius: 50%;
+  border: 1px solid var(--border-warm);
+  background: var(--paper-light);
+  color: var(--ink-faded);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+  transition: color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.country-scroll[hidden] { display: none; }
+.country-scroll:hover:not(:disabled) {
+  color: var(--soil-dark);
+  border-color: var(--soil-mid);
+}
+.country-scroll:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.country-scroll--left { margin-right: 4px; }
+.country-scroll--right { margin-left: 4px; }
+
+.country-tab {
+  padding: 10px 18px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-body);
+  color: var(--ink-faded);
+  transition: background-color 0.2s, border-bottom-color 0.2s, color 0.2s, font-weight 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+.country-tab__flag {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.country-tab:hover { color: var(--ink-charcoal); background: rgba(44, 36, 22, 0.03); }
+.country-tab.is-active {
+  color: var(--soil-dark);
+  border-bottom-color: var(--soil-dark);
+  font-weight: 600;
+}
+
+/* === 弹窗重叠条目标签栏（挂在弹窗左上角外侧，浏览器 new-tab 观感） ===
+   宽度由 JS 钉住弹窗的左右两缘（repositionOverlapTabs）——**不能用 max-width: 92vw**：
+   那是按整屏量的，而弹窗是居中且 max-width 960px 的，屏幕越宽条子右缘越出屏（1920 上 +326px）。
+   滚动下沉到 .overlap-tabs__track，两个箭头在行内保持固定、不随内容移动。 */
+.overlap-tabs {
+  position: fixed;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 2px;
+  z-index: 6100; /* 高于 .modal(6000)，作为 modal 的兄弟元素贴在左上角 */
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  box-shadow: 0 -2px 12px rgba(44, 36, 22, 0.10);
+  /* 纵向留白挪到 .overlap-tabs__track——整条高度不变（仍是 34+8=42px），
+     但标签的键盘焦点环需要的那 4px 要落在**滚动容器内部**才不会被裁。 */
+  padding: 0 6px;
+}
+.overlap-tabs[hidden] { display: none !important; }
+
+.overlap-tabs__track {
+  display: flex;
+  flex: 1;
+  min-width: 0;      /* 没有它，flex 项的 min-width:auto 会让 track 顶到内容宽、把行撑出屏 */
+  gap: 2px;
+  /* 上下各 4px = 全局 `button:focus-visible` 的 outline 2px + outline-offset 2px。
+     track 是 overflow 容器（overflow-x: auto 会把另一轴也算成 auto），环画在标签盒外，
+     没有这段留白就会被上下裁掉——改前滚动容器是带 4px padding 的行，所以这是一处要还的账。 */
+  padding: 4px 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.overlap-tabs__track::-webkit-scrollbar { display: none; }
+
+/* 左右滚动箭头 —— 仿页脚国家栏，但更小：这是一条 34px 高的标签条 */
+.overlap-tabs__nav {
+  flex-shrink: 0;
+  width: 24px;
+  /* 与标签同高、居中对齐。不能用 stretch —— track 现在含 4px 纵向内边距，
+     stretch 会把箭头拉到 42px，比标签高出一截。 */
+  height: var(--compact);
+  align-self: center;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius-sm);
+  background: var(--paper-light);
+  color: var(--ink-faded);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+  transition: color 0.15s, border-color 0.15s, opacity 0.15s;
+}
+.overlap-tabs__nav[hidden] { display: none; }
+.overlap-tabs__nav:hover:not(:disabled) {
+  color: var(--soil-dark);
+  border-color: var(--soil-mid);
+}
+.overlap-tabs__nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.overlap-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-body);
+  color: var(--ink-faded);
+  white-space: nowrap;
+  transition: background-color 0.15s, color 0.15s, font-weight 0.15s;
+  min-height: var(--compact);
+  /* 收缩三件套。floor 100px = padding 24 + flag 18 + gap 6 + ~52px 文字（5–7 字符）。
+     不设 floor 时自然下限是 48px「只剩一面旗」——同一国家的 flag 完全相同，那个状态下
+     分不出谁是谁，不如让它去滚（100px×12 = 1200 > 轨道 → 箭头出现）。
+     天花板 260px 是别让一个超长标题在只有两三条时吃掉整条。 */
+  flex: 0 1 auto;
+  min-width: 100px;
+  max-width: 260px;
+  overflow: hidden;
+}
+.overlap-tab__label {
+  /* overflow != visible 把盒子的自动最小尺寸降为 0 —— 这才是按钮能被压到比文字窄、
+     text-overflow: ellipsis 真正生效的钥匙（flex 项默认 min-width:auto = 内容最小宽度）。 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.overlap-tab__flag {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.overlap-tab:hover {
+  color: var(--ink-charcoal);
+  background: rgba(44, 36, 22, 0.04);
+}
+.overlap-tab.is-active {
+  color: var(--soil-dark);
+  background: rgba(74, 124, 89, 0.10);
+  font-weight: 600;
+}
+
+/* === 悬停卡片 === */
+.region-hover-shell {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin-top: -4px;
+  max-width: none !important;
+}
+
+/* 重叠堆叠卡片：隐藏各卡片底部的 Leaflet 三角箭头，避免箭头互相指到下一张卡片 */
+.region-hover-shell--stack.leaflet-tooltip-top:before,
+.region-hover-shell--stack.leaflet-tooltip-bottom:before,
+.region-hover-shell--stack.leaflet-tooltip-left:before,
+.region-hover-shell--stack.leaflet-tooltip-right:before {
+  display: none;
+}
+
+.region-hover-card {
+  width: fit-content;
+  max-width: 460px;
+  min-width: 180px;
+  background: var(--paper-light);
+  border-left: 3px solid var(--soil-dark);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  padding: 10px 14px;
+  box-shadow: var(--shadow-md);
+}
+
+.region-hover-card__title {
+  font-size: 13px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--ink-charcoal);
+  margin-bottom: 4px;
+  letter-spacing: 0.01em;
+  /* 长标题（如中文+英文地名）可换行，最多 2 行 + 省略号；勿用 nowrap（52+ 字符会溢出卡片） */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.35;
+}
+
+.region-hover-card__desc {
+  font-size: 12px;
+  color: var(--ink-charcoal);
+  background: rgba(74, 124, 89, 0.07);
+  border-radius: 4px;
+  padding: 6px 8px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.region-hover-card__overlap {
+  font-size: 12px;
+  color: var(--earth-terracotta);
+  margin-top: 4px;
+  font-style: italic;
+}
+
+/* === 去除 Leaflet SVG 聚焦轮廓 === */
+#map svg:focus { outline: none; }
+
+/* === 遮罩 === */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(44, 36, 22, 0.40);
+  backdrop-filter: blur(1px);
+  z-index: 5000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.backdrop.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 确保 hidden 属性生效 — 覆盖 .modal display:flex 和 .backdrop */
+.modal[hidden],
+.hero__stats[hidden],
+.backdrop[hidden],
+.proposal-backdrop[hidden],
+.proposal-modal[hidden],
+#review-list[hidden],
+#user-list[hidden],
+#tag-manager[hidden],
+.view-toggle[hidden] {
+  display: none !important;
+}
+
+/* ================================================================
+   弹窗 — 野外笔记的核心展示
+   左侧是笔记页（纸质感），右侧是街景窗口
+   ================================================================ */
+.modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%) scale(0.96);
+  z-index: 6000;
+  /* 尺寸全部走视口单位，**不设 max-width / max-height**。
+     浏览器缩放改的是 CSS 视口像素数，而 CSS px 是缩放下不变的物理单位：绝对 px 上限
+     （曾经是 max-width: 960px）会把弹窗尺寸焊死在某个缩放档上 —— 缩到 50% 时视口宽了
+     整整一倍，弹窗却仍然是 960px，占屏比从 50% 塌到 25%，四周只剩一大片地图。
+     70vw / 75dvh 让物理尺寸在所有缩放档恒定，占屏比不变。要调尺寸只改这两个数。 */
+  width: 70vw;
+  height: 75dvh;
+  background: var(--paper-light);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.25s;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* 焦点移到容器上（tabindex="-1"，仅程序化聚焦）时不画外框 */
+.modal:focus { outline: none; }
+
+.modal.is-open {
+  transform: translate(-50%, -50%) scale(1);
+  opacity: 1;
+}
+
+/* 弹窗头部 — 像笔记本标题行 */
+.modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border-warm);
+  flex-shrink: 0;
+  background: linear-gradient(180deg, var(--paper-warm) 0%, var(--paper-light) 100%);
+}
+
+.modal__title {
+  font-size: 20px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  color: var(--soil-dark);
+  letter-spacing: 0.02em;
+}
+
+.modal__close {
+  width: var(--mid);
+  height: var(--mid);
+  border: 1px solid var(--border-warm);
+  border-radius: 50%;
+  background: var(--paper-light);
+  font-size: 22px;
+  cursor: pointer;
+  color: var(--ink-faded);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.modal__close:hover {
+  background: var(--paper-warm);
+  color: var(--ink-charcoal);
+  border-color: var(--ink-faded);
+}
+
+/* 弹窗主体 — 两栏 */
+.modal__body {
+  display: flex;
+  flex: 1;
+  /* flex 项默认 min-height: auto，内容（或子项的 min-height）撑高时会顶破容器，
+     把 overflow: hidden 变成硬裁切。显式归零是下面两条列规则能正常收缩的前提。 */
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 左栏 — 野外笔记页 */
+.modal__left {
+  flex: 0 0 38%;
+  padding: 24px 28px;
+  overflow-y: auto;
+  min-width: 0;
+  min-height: 0;
+  /* 纸页边缘阴影 — 像是笔记本的装订线 */
+  background:
+    linear-gradient(90deg, transparent 0%, transparent calc(100% - 1px), rgba(var(--border-warm-rgb), 0.4) calc(100% - 1px), rgba(var(--border-warm-rgb), 0.15) 100%);
+}
+
+/* 右栏 — 街景窗口 */
+.modal__right {
+  flex: 0 0 62%;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  background: var(--paper-warm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal__iframe {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+.modal__streetview-hint {
+  color: var(--ink-faded);
+  font-size: 13px;
+  font-style: italic;
+  font-family: var(--font-display);
+}
+
+/* 弹窗标签 */
+.modal__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+.modal__tag {
+  padding: 2px 10px;
+  background: rgba(45, 90, 61, 0.08);
+  color: var(--soil-dark);
+  border: 1px solid rgba(45, 90, 61, 0.18);
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* 教学文本 */
+.modal__desc {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--ink-charcoal);
+}
+.modal__desc h3 {
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  margin-top: 22px;
+  margin-bottom: 6px;
+  color: var(--soil-dark);
+  letter-spacing: 0.02em;
+  padding-bottom: 4px;
+  border-bottom: 1px dotted var(--border-warm);
+}
+.modal__desc p { margin-bottom: 8px; }
+.modal__desc strong { color: var(--ink-charcoal); }
+
+/* 图片画廊 */
+.modal__gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.modal__figure {
+  margin: 0;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--paper-card);
+  border: 1px solid var(--border-warm);
+}
+.modal__image {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  display: block;
+}
+.modal__caption {
+  font-size: 12px;
+  color: var(--ink-faded);
+  padding: 6px 10px;
+  text-align: center;
+  font-style: italic;
+}
+
+/* 贡献者 */
+.modal__source {
+  margin-top: 20px;
+  padding-top: 12px;
+  border-top: 1px dotted var(--border-warm);
+  font-size: 12px;
+  color: var(--ink-subtle);
+  font-style: italic;
+}
+.modal__source-label { font-weight: 600; font-style: normal; }
+
+/* 标题下方的一行：提交者 + 标题翻译按钮并排。
+   翻译按钮由 _buildTranslateToggle 追加到这里（appendChild 落在提交者之后，
+   所以它在右侧）；提交者为空时会 display:none 收起，此时按钮靠 gap 顶到行首。 */
+.modal__meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.modal__meta .lang-toggle { margin-left: 0; }
+
+/* 提交者 — 在弹窗标题下方，始终可见 */
+.modal__submitted {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-subtle);
+  font-style: italic;
+  font-family: var(--font-body);
+}
+.modal__submitted:empty {
+  display: none;
+}
+
+/* Region reactions */
+.modal__reactions-prompt {
+  grid-column: 1 / -1;
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--ink-faded);
+  margin-bottom: 2px;
+}
+@keyframes reaction-pop {
+  0%   { transform: scale(1);   box-shadow: 0 0 0 0 rgba(74, 124, 89, 0.5); }
+  20%  { transform: scale(1.25); box-shadow: 0 0 0 6px rgba(74, 124, 89, 0.25); }
+  50%  { transform: scale(1.15); box-shadow: 0 0 0 3px rgba(74, 124, 89, 0.1); }
+  100% { transform: scale(1);   box-shadow: 0 0 0 0 rgba(74, 124, 89, 0); }
+}
+.modal__reaction-btn.is-animating {
+  animation: reaction-pop 0.6s ease;
+  pointer-events: none;
+}
+.modal__reactions {
+  /* 六项「图标 + 计数」按钮，**按内容宽**排一行，装不下才换行 —— 2026-10-04 用户指定
+     （旧版是 grid 3 列 2 行）。
+     为什么不是 grid：`1fr` 的最小尺寸是 min-content，所以按钮挤到装不下时 grid
+     **不换行而是捅出容器**。实测 768px 视口（左栏内容宽 148px）下旧规则溢出
+     4.6 / 27.5 / 50.4px（一位数 / 两位数 / 三位数计数）—— 横向被裁或出横滚条。
+     flex + wrap 让同样的情形退化成换行，不会再溢出。
+     实测（真实 .modal > .modal__left 几何，容器宽 = 70vw × 38% − 56px 内边距）：
+       1920→454.7px 6 个一行（三种位数都够）；1440→327px 一位数与两位数都是 6 个一行
+       （余 47px / 1.4px）；1280→284.5px 一位数 6 个一行（余 4.7px）；1024→216.4px 4+2；
+       768→148.3px 3+3。gap 8px + padding 5px 8px 的旧按钮宽在 1280/1440 会掉成 5+1，
+       所以按钮的水平内边距与 gap 一起收到 6px —— 这两个值是一对，只改一个就退回 5+1。
+       三位数计数在 1440 仍会 5+1，这是按钮宽度的下限决定的，接受。 */
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+  margin-top: 8px;
+}
+.modal__reaction-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  /* 水平内边距是**排得下 6 个**的一半（另一半是上面 .modal__reactions 的 gap: 6px），
+     见那段注释的实测表。改大就退回 5+1。 */
+  padding: 5px 6px;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  background: var(--paper-light);
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--ink-faded);
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, font-weight 0.15s, opacity 0.15s;
+  min-height: var(--mid);
+}
+.modal__reaction-btn:hover {
+  border-color: var(--soil-mid);
+  color: var(--ink-charcoal);
+}
+.modal__reaction-btn.is-active--useful {
+  background: #e8f5e9;
+  border-color: var(--soil-mid);
+  color: var(--soil-dark);
+  font-weight: 600;
+}
+.modal__reaction-btn.is-active--useless {
+  background: #ffebee;
+  border-color: #ef9a9a;
+  color: var(--feedback-red);
+  font-weight: 600;
+}
+.modal__reaction-btn.is-active--wrong {
+  background: #fff3e0;
+  border-color: #ffcc80;
+  color: #e65100;
+  font-weight: 600;
+}
+.modal__reaction-btn.is-active--error {
+  background: #fff8e1;
+  border-color: #ffe082;
+  color: #f57f17;
+  font-weight: 600;
+}
+.modal__reaction-btn.is-active--goat {
+  background: #f3e5f5;
+  border-color: #ce93d8;
+  color: #6a1b9a;
+  font-weight: 600;
+}
+.modal__reaction-btn.is-active--heart {
+  background: #fce4ec;
+  border-color: #f48fb1;
+  color: #c2185b;
+  font-weight: 600;
+}
+/* 图标是自托管 Twemoji SVG（16px）；alt="" 已把它标成装饰，数字才是内容。 */
+.modal__reaction-btn .modal__reaction-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: block;
+}
+/* 图标取不到 src 时的文字兜底：不要被上面的 16px 盒子裁掉。 */
+.modal__reaction-btn .modal__reaction-icon--fallback {
+  width: auto;
+  height: auto;
+  font-size: 12px;
+}
+.modal__reaction-btn .modal__reaction-count {
+  font-variant-numeric: tabular-nums;
+}
+.modal__reaction-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* === 响应式 — 工具栏 === */
+@media (max-width: 500px) {
+  .country-tab { padding: 8px 12px; font-size: 12px; }
+}
+
+/* === 响应式 — 400px 断点（小屏手机：iPhone SE 等） === */
+@media (max-width: 400px) {
+  /* 导航栏 */
+  .nav { padding: 8px 12px; }
+  .nav__logo { font-size: 16px; }
+  .nav__link { font-size: 12px; padding: 4px 8px; }
+  .nav__link--login { font-size: 12px; padding: 4px 10px; }
+
+  /* 首页 hero */
+  .hero { min-height: 40vh; padding: 24px 16px; }
+  .hero__title { font-size: 24px; }
+  .hero__subtitle { font-size: 14px; }
+
+  /* 首页国家卡片 —— ⚠️ 这里原有三条 `.countries` / `.countries__grid` / `.country-card` 规则，
+     **一条都没生效过**。它们写在第 782 行，而这三个选择器的基准规则在第 951 行之后；
+     同权重时**后写的赢**，所以基准一直盖着它们。媒体查询本身匹配（实测 matchMedia 为 true），
+     失效纯粹是**源序**造成的。可见的 ≤400px 行为一直来自 600px 那条（2 列），不是这里的 1 列。
+     这个块里其它组件的规则同样被后面的 767 / 680 / 600 / 500 块盖住 —— `.nav`、`.hero`、
+     `.footer`、`.form-submit` 实测都停在基准值上。**那是另一个独立问题，不在这轮范围内。**
+     国家卡片的分档现在统一写在 860 / 680 / 600 三个块里，那里在基准之后，是真的生效的。 */
+
+  /* 首页 footer */
+  .footer { font-size: 12px; padding: 16px; }
+
+  /* 探索页弹窗 */
+  .modal { width: 96vw; }
+  .modal__header { padding: 12px 16px; }
+  .modal__title { font-size: 16px; }
+  .modal__left { padding: 16px; }
+  .modal__desc { font-size: 13px; }
+
+  /* 悬停卡片 */
+  .region-hover-card { max-width: 80vw; }
+
+  /* 提交页 */
+  .submit-layout__form { padding: 16px; }
+  .submit-layout__form h2 { font-size: 18px; }
+  .form-submit { padding: 14px; font-size: 16px; }
+
+  /* 审核页 + 我的提交 */
+  .review-layout { padding: 12px; }
+  .review-layout h1 { font-size: 20px; }
+  .review-tab { font-size: 12px; padding: 6px 12px; ; }
+  .review-item { padding: 14px; }
+  .review-item__name { font-size: 16px; }
+  .review-item__desc { font-size: 13px; }
+  .review-item__actions { flex-wrap: wrap; gap: 6px; }
+
+  /* 标签管理 */
+  .tag-manager__row { flex-direction: column; }
+  .tag-manager__row button { width: 100%; }
+}
+
+/* === 可达性 === */
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--soil-mid);
+  outline-offset: 2px;
+}
+
+/* === 屏幕阅读器 === */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* === 打印优化 === */
+@media print {
+  .map-tools, .country-bar-row, .backdrop { display: none !important; }
+  .app-shell { height: auto; }
+  .map-shell { height: 400px; }
+}
+
+/* === Leaflet tooltip === */
+.leaflet-tooltip { pointer-events: none !important; }
+
+/* === 导航栏 === */
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-warm);
+  background: var(--paper-light);
+  position: sticky;
+  top: 0;
+  /* 导航栏是「页面框架」层，不是「地图控件」层 —— 它曾经是 1000，和 Leaflet 的
+     `.leaflet-top/.leaflet-bottom` 同级，于是 explore 那个为了压过 Leaflet 而抬到 1100 的
+     工具栏顺带把它也压了：用户下拉菜单（`.nav__dropdown`）整个落在工具栏底下，
+     点不到。实测 `elementFromPoint` 在下拉中心返回的是那个工具栏。
+
+     注意下拉自己的 `z-index: 4000` 救不了它：`.nav` 是 `position: sticky`，**按规范必然
+     创建层叠上下文**（跟 z-index 是不是 auto 无关，实测 auto 也一样被盖），4000 只能在这个
+     上下文内部竞争。所以只能抬导航栏本身。
+
+     2026-09-18:explore 的工具栏整条退役,那条 1100 也随之消失。地图浮层改成 `.map-tools` 的
+     1001 —— 仍远低于这里,所以「导航下拉必须压过页面浮层」这条契约不变。
+     1200 = 高于地图浮层(1001)，低于弹窗遮罩(1300)/弹窗(1301)。
+     刻度：地图控件 1000 < 地图浮层 1001 < 导航栏 1200 < 弹窗 1300/1301。 */
+  z-index: 1200;
+  min-height: 69px;
+}
+.nav__logo {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--soil-dark);
+  text-decoration: none;
+}
+.nav__links { display: flex; gap: 4px; }
+/* 主题切换按钮。高度走 --mid 档而不是写死 44px ——「44 是命中区下限、不是视觉盒子下限」，
+   见 .trellis/spec/frontend/touch-targets.md。@media (pointer: coarse) 会自动把它抬到 44。
+   ⚠️ 按钮由 js/theme.js 的 mount() 动态创建，不在任何 HTML 里 —— 因为 auth.js 重建导航时
+   会清空 .nav，写死的节点会被抹掉（见 auth.js initNav）。 */
+.nav__theme {
+  width: var(--mid);
+  height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  margin-left: 4px;
+  /* 无框无底，只留字形 —— 与 .map-reset-btn / .search-chip__toggle 那几个字形图标钮同一档
+     （它们也是 font-size: 20px）。悬停只换颜色，不浮出底色方块。 */
+  background: none;
+  border: none;
+  color: var(--ink-faded);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+.nav__theme:hover { color: var(--soil-dark); }
+.nav__link {
+  text-decoration: none;
+  font-size: 14px;
+  color: var(--ink-faded);
+  padding: 6px 14px;
+  border-radius: 6px;
+  transition: background-color 0.15s, color 0.15s, font-weight 0.15s;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+.nav__link:hover { color: var(--ink-charcoal); background: var(--paper-warm); }
+.nav__link.is-active { color: var(--soil-dark); font-weight: 600; background: var(--paper-warm); }
+
+/* Nav notification badge */
+.nav__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--red-fill);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* === 首页 Hero === */
+.hero {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 55vh;
+  padding: 40px 24px;
+  text-align: center;
+}
+.hero__content { max-width: 600px; }
+.hero__title {
+  font-family: var(--font-display);
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--soil-dark);
+  margin-bottom: 16px;
+  letter-spacing: 0.03em;
+}
+.hero__subtitle {
+  font-size: 18px;
+  color: var(--ink-faded);
+  line-height: 1.7;
+  font-family: var(--font-display);
+  font-style: italic;
+}
+.hero__stats {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 24px;
+  font-size: 16px;
+  color: var(--ink-faded);
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+.hero__stats[hidden] {
+  display: none !important;
+}
+.hero__stats-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.hero__stats-num {
+  font-size: 25px;
+  font-weight: 700;
+  color: var(--soil-dark);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.hero__stats-label {
+  font-size: 16px;
+  color: var(--ink-faded);
+}
+.hero__stats-dot {
+  color: var(--ink-faded);
+  opacity: 0.4;
+  font-size: 18px;
+  user-select: none;
+}
+.hero__stats-flags {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 6px;
+  transition: opacity 0.15s ease;
+}
+.hero__stats-flags:hover {
+  opacity: 0.9;
+}
+.hero__stats-flags:focus-visible {
+  outline: 2px solid var(--soil-dark);
+  outline-offset: 2px;
+}
+.hero__stats-flag {
+  width: 28px;
+  height: 19px;
+  border-radius: 3px;
+  object-fit: cover;
+  display: inline-block;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease;
+}
+.hero__stats-flag:hover {
+  transform: scale(1.18);
+}
+.hero__stats-avatars {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 3px 5px;
+  border-radius: 16px;
+  transition: opacity 0.15s ease;
+}
+.hero__stats-avatars:hover {
+  opacity: 0.9;
+}
+.hero__stats-avatars:focus-visible {
+  outline: 2px solid var(--soil-dark);
+  outline-offset: 2px;
+}
+.hero__stats-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: inline-block;
+  margin-left: -8px;
+  border: 2px solid var(--paper);
+  background: var(--paper-sheet);
+  transition: transform 0.15s ease, z-index 0.15s ease;
+}
+.hero__stats-avatar:first-child {
+  margin-left: 0;
+}
+.hero__stats-avatar:hover {
+  transform: scale(1.18);
+  z-index: 3;
+}
+.hero__stats-avatar--fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-faded);
+  background: var(--paper-sheet);
+}
+@media (max-width: 640px) {
+  .hero__stats {
+    flex-wrap: wrap;
+    gap: 10px 14px;
+  }
+}
+
+/* === 国家卡片网格 === */
+/* 桌面 6 列。容器与 .view-toggle / .world-map / .recent-updates 同为 900px，整页保持
+   一条居中的列。另一条路是把 .countries 放宽到 1100px（卡片 165px、长名不折行），
+   但那会比上下两块各宽出 200px，所以选了紧凑这一条。
+   ⚠️ 列宽用 minmax(0, 1fr) 而不是 1fr：1fr 的最小值是 auto，卡片内容撑不开时
+   轨道不会缩，会静默把整行顶出容器（grid blowout）。minmax(0, …) 才是「等宽的 6 条」。 */
+.countries { padding: 0 24px 60px; max-width: 900px; margin: 0 auto; }
+.countries__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.country-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 10px;
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  text-decoration: none;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+.country-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.country-card__flag { width: 40px; height: auto; margin-bottom: 8px; border-radius: 3px; }
+.country-card__name {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-charcoal);
+  margin-bottom: 3px;
+  text-align: center;
+  line-height: 1.25;
+  /* 长国家名（如 "Sao Tome and Principe"）换行时让两行更均衡、居中，避免头重脚轻 */
+  text-wrap: balance;
+}
+.country-card__count {
+  font-size: 11px;
+  color: var(--ink-faded);
+}
+
+/* === 首页视图切换（方框式 / 地图式） === */
+.view-toggle {
+  display: flex;
+  justify-content: center;
+  max-width: 900px;
+  margin: 0 auto 24px;
+  padding: 0 24px;
+}
+.view-toggle__btn {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--ink-faded);
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  padding: 0 22px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, border-left-color 0.15s, border-radius 0.15s, color 0.15s;
+  min-height: var(--mid);
+}
+.view-toggle__btn:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+.view-toggle__btn:last-child { border-radius: 0 var(--radius) var(--radius) 0; border-left: none; }
+.view-toggle__btn.is-active {
+  color: #fff;
+  background: var(--soil-fill);
+  border-color: var(--soil-dark);
+}
+.view-toggle__btn:hover:not(.is-active) { color: var(--soil-dark); background: rgba(74, 124, 89, 0.06); }
+
+/* === 首页世界地图 === */
+.world-map {
+  max-width: 900px;
+  margin: 0 auto 60px;
+  padding: 0 24px;
+}
+.world-map__svg svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.world-map__svg path {
+  fill: #d8d5cd;
+  stroke: var(--paper-light);
+  stroke-width: 0.75;
+  transition: filter 0.15s;
+}
+.world-map__svg path.has-regions { fill: var(--soil-mid); }
+.world-map__svg path.nine-dash-line {
+  fill: var(--ink-faded);
+  stroke: var(--ink-faded);
+  stroke-width: 0.5;
+  stroke-linejoin: round;
+  pointer-events: none;
+}
+.world-map__svg path[data-geo-id]:hover,
+.world-map__svg path[data-propose]:hover,
+.world-map__svg path.is-china-hovered {
+  cursor: pointer;
+  filter: brightness(0.85);
+}
+.world-map__svg path.nine-dash-line.is-china-hovered {
+  cursor: default;
+}
+.world-map__svg path[tabindex]:focus-visible {
+  outline: 2px solid var(--soil-dark);
+  outline-offset: 1px;
+}
+.world-map__svg path[tabindex]:focus:not(:focus-visible) {
+  outline: none;
+}
+.world-map__svg .country-dot {
+  fill: #d8d5cd;
+  stroke: var(--paper-light);
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.world-map__svg .country-dot--has-regions { fill: var(--soil-mid); }
+.world-map__svg .country-dot:hover,
+.world-map__svg .country-dot.is-china-hovered { filter: brightness(0.85); }
+.world-map__svg .country-dot[tabindex]:focus-visible {
+  outline: 2px solid var(--soil-dark);
+  outline-offset: 1px;
+}
+.world-map__svg .country-dot[tabindex]:focus:not(:focus-visible) {
+  outline: none;
+}
+.world-map__svg { position: relative; overflow: hidden; }
+.world-map__tooltip {
+  position: absolute;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.world-map__tooltip[hidden] { display: none; }
+.world-map__tooltip__flag { width: 32px; height: auto; border-radius: 2px; flex: 0 0 auto; }
+.world-map__tooltip__text { display: flex; flex-direction: column; line-height: 1.25; }
+.world-map__tooltip__name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-charcoal);
+}
+.world-map__tooltip__count { font-size: 12px; color: var(--ink-faded); }
+.world-map__zoom {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  background: var(--paper-light);
+}
+.world-map__zoom button {
+  width: var(--compact);
+  height: var(--compact);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-light);
+  color: var(--ink-charcoal);
+  font-size: 18px;
+  line-height: 1;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+.world-map__zoom button + button { border-top: 1px solid var(--border-warm); }
+.world-map__zoom button:hover { background: rgba(74, 124, 89, 0.08); }
+.world-map__zoom button:disabled { color: var(--ink-subtle); cursor: default; background: var(--paper-light); }
+.world-map__legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--ink-faded);
+}
+#world-map-svg:empty,
+#world-map-svg:empty + .world-map__legend {
+  display: none !important;
+}
+.world-map__legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.world-map__legend-dot:first-child { margin-left: 12px; }
+.world-map__legend-dot--green { background: var(--soil-mid-fill); }
+.world-map__legend-dot--gray { background: #d8d5cd; }
+
+/* 页脚署名 */
+.footer__attribution { margin-top: 8px; font-size: 12px; }
+
+/* === 页脚 === */
+.footer {
+  text-align: center;
+  padding: 24px;
+  font-size: 13px;
+  color: var(--ink-faded);
+  border-top: 1px solid var(--border-warm);
+}
+
+/* 首页底部社交图标：悬浮时变亮并显示品牌色 */
+.footer-icon {
+  color: inherit;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  padding: 10px;
+  transition: color 0.15s;
+}
+.footer-icon__svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+.footer-icon:hover .footer-icon__svg {
+  opacity: 1;
+}
+.footer-icon--discord:hover { color: #5865F2; }
+.footer-icon--bilibili:hover { color: #FB7299; }
+
+/* === 提交页布局 === */
+.submit-layout {
+  display: flex;
+  height: calc(100dvh - 69px);  /* 减去导航栏高度（.nav min-height 69px） */
+}
+.submit-layout__map { flex: 1; min-width: 0; }
+.submit-layout__form {
+  flex: 0 0 360px;
+  max-width: 100%;
+  padding: 24px;
+  overflow-y: auto;
+  border-left: 1px solid var(--border-warm);
+  background: var(--paper-light);
+}
+.submit-layout__form h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin-bottom: 20px;
+  color: var(--soil-dark);
+}
+
+/* ===== Submit 页的「提交范围」开关（region / country） =====
+ * 选中态由 JS 上 .is-selected，不用 :has() —— 这张表里没有先例，不引入新依赖。
+ * country 模式下不绘制任何几何：类挂在 #submit-form（唯一能罩住画布、手机警告、
+ * 形状列表、复用按钮的祖先）上，一次性把它们都收起来。**不删除**任何已画的 shape，
+ * 切回 region 时摘掉 class 即原样复原（见 submit.html 的 setScope）。
+ * 例外：形状列表由 renderShapeList 内联 display 控制，那条走 JS，不在这里。 */
+.scope-choice {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.scope-choice__opt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border-warm, #e0d8cc);
+  border-radius: var(--radius, 8px);
+  background: var(--paper-light, #fdfaf3);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.scope-choice__opt.is-selected {
+  border-color: var(--soil-dark);
+  background: rgba(74, 124, 89, 0.08);
+  font-weight: 600;
+}
+.scope-choice__opt input { margin: 0; flex-shrink: 0; }
+.scope-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-faded, #7a7265);
+}
+#submit-form.is-country-scope .leaflet-overlay-pane,
+#submit-form.is-country-scope .leaflet-pm-toolbar,
+#submit-form.is-country-scope #reuse-last-btn,
+#submit-form.is-country-scope #mobile-warning { display: none; }
+.submit-map-note {
+  position: absolute;
+  inset: 0;
+  z-index: 500;                    /* 压过 .leaflet-pane(400)，低于控件层(800/1000) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-faded, #7a7265);
+  background: rgba(253, 250, 243, 0.78);
+  pointer-events: none;            /* 地图仍可拖动 —— 只是不能画 */
+}
+/* display:flex 会压过 UA 的 [hidden]，必须显式补一条。 */
+.submit-map-note[hidden] { display: none; }
+
+.form-group { margin-bottom: 16px; }
+/* 只管「字段名」那种 label（输入框上方那行小标题），所以必须是直接子元素。
+   用后代选择器会让它顺手命中卡片内部的控件型 label（如 .scope-choice__opt），
+   而它 (0,1,1) 的优先级高过那些组件自己的类选择器，会把它们的 display:flex 压成 block。 */
+.form-group > label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-charcoal);
+  margin-bottom: 6px;
+}
+/* 只给「输入型」控件。radio/checkbox 不是文本输入，套上 width:100% + min-height:44px +
+   padding 会被撑成一个 44px 高的方块（圆点跟着拉变形），下面 :focus 那条同理。 */
+.form-group input:not([type="radio"]):not([type="checkbox"]),
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-warm);
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 16px;
+  min-height: var(--mid);
+  color: var(--ink-charcoal);
+  background: var(--paper-warm);
+  transition: border-color 0.15s;
+}
+.form-group input:not([type="radio"]):not([type="checkbox"]):focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: var(--soil-mid);
+}
+.form-group textarea { min-height: 80px; resize: vertical; }
+
+/* select 的字比同表单的 input/textarea 小一号。
+   16px 是给 input/textarea 留的 —— iOS Safari 在字号 < 16px 的表单控件获得焦点时会
+   自动放大整页，文本输入框不能低于这条线。select 点击唤起的是系统选择器，不受影响。
+   必须放在上面 .form-group 分组规则之后才能生效（同优先级，后者胜）。 */
+.form-group select { font-size: 14px; }
+.form-submit {
+  width: 100%;
+  padding: 12px;
+  min-height: var(--mid);
+  background: var(--soil-fill);
+  color: var(--on-fill);
+  border: none;
+  border-radius: 8px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.form-submit:hover { opacity: 0.9; }
+.form-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.ghost-btn {
+  background: none;
+  border: 0;
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--ink-faded);
+  font-family: var(--font-body);
+  transition: color 0.15s, background 0.15s;
+}
+.ghost-btn:hover {
+  color: var(--soil-dark);
+  background: rgba(var(--soil-rgb), 0.10);
+}
+.form-feedback { margin-top: 12px; padding: 10px; border-radius: 6px; font-size: 13px; display: none; }
+.form-feedback.is-success { display: block; background: #e8f5e9; color: #2e7d32; }
+.form-feedback.is-error { display: block; background: #fce4ec; color: var(--feedback-red); }
+.form-hint { font-size: 12px; color: var(--ink-faded); margin-top: 4px; }
+.form-notice { margin-top: 16px; padding: 10px 12px; background: #fff8e1; border-radius: 6px; font-size: 12px; color: #8d6e00; line-height: 1.5; }
+
+/* 标签芯片 */
+.tag-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border-warm);
+  border-radius: 14px;
+  font-size: 12px;
+  color: var(--ink-charcoal);
+  background: var(--paper-warm);
+  cursor: pointer;
+  user-select: none;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.tag-chip:hover { border-color: var(--soil-mid); }
+.tag-chip.is-selected {
+  background: var(--soil-fill);
+  color: var(--on-fill);
+  border-color: var(--soil-dark);
+}
+.tag-chip__remove {
+  background: none;
+  border: none;
+  color: inherit;
+  opacity: 0.7;
+  cursor: pointer;
+  padding: 0 0 0 5px;
+  font-size: 14px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+.tag-chip__remove:hover {
+  opacity: 1;
+}
+
+/* === 审核页 === */
+.review-layout {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  max-height: calc(100dvh - 56px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.review-layout h1 {
+  font-family: var(--font-display);
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: var(--soil-dark);
+}
+.review-auth {
+  max-width: 360px;
+  margin: 80px auto;
+  text-align: center;
+}
+.review-auth h2 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin-bottom: 16px;
+  color: var(--soil-dark);
+}
+.review-auth input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--border-warm);
+  border-radius: 6px;
+  font-size: 16px;
+  min-height: var(--mid);
+  margin-bottom: 12px;
+  font-family: inherit;
+}
+.review-auth button {
+  padding: 10px 28px;
+  min-height: var(--mid);
+  background: var(--soil-fill);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.review-tabs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
+.review-tabs__row { display: flex; gap: 8px; overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+.review-tab {
+  padding: 8px 18px;
+  border: 1px solid var(--border-warm);
+  border-radius: 20px;
+  background: var(--paper-light);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s, font-size 0.15s, min-height 0.15s, padding 0.15s;
+  color: var(--ink-faded);
+  font-family: inherit;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+.review-tab.is-active { background: var(--soil-fill); color: #fff; border-color: var(--soil-dark); }
+
+/* Primary module tabs */
+.review-tabs__row--primary {
+  padding-bottom: 10px;
+  margin-bottom: 2px;
+  border-bottom: 2px solid var(--border-warm);
+}
+.review-tab--primary {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 22px;
+}
+
+/* Secondary filter rows — subdued, indented */
+.review-tabs__row--secondary {
+  padding-left: 4px;
+}
+.review-tabs__row--secondary .review-tab {
+  font-size: 13px;
+  padding: 6px 14px;
+}
+#review-list,
+#my-results {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+}
+#my-results .review-item {
+  width: calc(33.33% - 6px);
+}
+.review-item {
+  width: calc(50% - 4px);
+  flex-shrink: 0;
+  padding: 10px;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  background: var(--paper-light);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.review-item--hidden { opacity: 0.45; }
+
+/* Trash card */
+.review-item--trash {
+  background: rgba(0, 0, 0, 0.03);
+  border-left: 3px solid var(--ink-faded);
+}
+
+/* Trash bar (select-all + restore-all) */
+.trash-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  margin-bottom: 12px;
+}
+
+.review-item__map {
+  flex: 0 0 120px;
+  height: 80px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+/* 国家范围条目的小地图占位。保持与 .review-item__map 同尺寸，行高不会跳 ——
+   里面写的是一句说明，因为这条本来就没有形状可画。 */
+.review-item__map--scope {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 6px;
+  border: 1px dashed var(--border-warm, #e0d8cc);
+  background: var(--paper-light, #fdfaf3);
+  color: var(--ink-faded, #7a7265);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+/* 名称后面的「整条覆盖整个国家」标记 —— 与 Draft edit 徽章同档，换个色以区分。 */
+.review-item__scope-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(74, 124, 89, 0.14);
+  color: var(--soil-dark);
+  margin-left: 6px;
+}
+
+.review-item__info { flex: 1; min-width: 0; }
+.review-item__name {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--soil-dark);
+}
+.review-item__submitter {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--ink-muted, #888);
+  font-family: var(--font-body);
+}
+.review-item__draft-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  background: #FFF3CD;
+  color: #856404;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+.review-item__meta {
+  font-size: 12px;
+  color: var(--ink-faded);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.review-item__desc {
+  font-size: 12px;
+  color: var(--ink-faded);
+  margin-bottom: 6px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.review-item__tags { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 2px; }
+.review-item__tag {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  background: var(--paper-warm);
+  color: var(--ink-faded);
+}
+.review-item__new-tag {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  background: #1976D2;
+  color: #fff;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.review-item__actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.review-btn--approve,
+.review-btn--exists,
+.review-btn--reject,
+.review-btn--undo,
+.review-btn--edit,
+.review-btn--delete,
+.review-btn--hide {
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 12px;
+  font-family: inherit;
+  line-height: 1;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.review-btn--approve { background: var(--soil-fill); color: #fff; border: none; }
+.review-btn--approve:hover { background: #1e4a2d; }
+.review-btn--exists { background: #4a90d9; color: #fff; border: none; }
+.review-btn--exists:hover { background: #3a7ec0; }
+.review-btn--reject { background: var(--red-fill); color: #fff; border: none; }
+.review-btn--reject:hover { background: #9a1818; }
+.review-btn--undo,
+.review-btn--edit { background: var(--paper-warm); color: var(--ink-charcoal); border: 1px solid var(--border-warm); }
+.review-btn--undo:hover,
+.review-btn--edit:hover { background: var(--border-light); }
+
+/* Reload 按钮的统一皮肤：**无底、无边框**，只剩一个放大的 ↻。admin review 七个模块共用这一个类
+   （submissions / users / audit / countries / notes / tags / analytics），此前是两套 ——
+   submissions 那条自带内联的边框+白底，其余六个走 `.review-btn--undo`（纸色底 + 边框）。
+   除 tag manager 外都坐在各自面板标题行的最右侧；tag manager 没有标题，落在第一个 section
+   的 h3 行上（见 `.tag-manager__heading`）。
+   ⚠️ 去掉可见文字之后，可访问名称只剩 `title`（很弱），所以每个按钮必须自带 `aria-label`。 */
+.review-reload-btn {
+  /* 命中去要自己撑：符号 22px，但按钮没有边框/底色了，不给 min-* 就只剩字形那点面积。
+     44×44 与全站触控目标一致（`.review-btn--undo` 等也是 min-height: 44px）。 */
+  min-width: var(--mid);
+  min-height: var(--mid);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--ink-faded);
+  font-family: inherit;
+  font-size: 22px;
+  line-height: 1;
+}
+.review-reload-btn:hover { color: var(--ink-charcoal); }
+.review-btn--delete { background: transparent; color: var(--feedback-red); border: 1px solid #c62828; }
+.review-btn--delete:hover { background: rgba(198,40,40,0.08); }
+
+/* 批次审核浮动条 */
+.batch-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink-muted, #666);
+  cursor: pointer;
+  margin-left: auto;
+  padding: 0 4px;
+  user-select: none;
+  white-space: nowrap;
+}
+.batch-select-all input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--soil-dark, #4a7c59);
+}
+
+.batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--soil-dark, #4a7c59);
+  color: #fff;
+  border-radius: 8px;
+  position: sticky;
+  bottom: 12px;
+  z-index: 50;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  margin-top: 16px;
+}
+.batch-bar[hidden] { display: none; }
+/* Inline variant for the pending-tag batch bar: render in-flow instead of
+   sticking to the viewport bottom (avoids overlapping the submission bar). */
+.batch-bar--inline { position: static; margin-top: 12px; }
+.batch-bar__count {
+  font-size: 13px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+.batch-bar .review-btn--approve {
+  background: #fff;
+  color: #2e7d32;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+.batch-bar .review-btn--approve:hover { background: #e8f5e9; }
+.batch-bar .review-btn--reject {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+.batch-bar .review-btn--reject:hover { background: rgba(255,255,255,0.25); }
+.batch-bar .review-btn--undo {
+  background: transparent;
+  color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+.batch-bar .review-btn--undo:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+.review-item__checkbox {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 8px 0 0;
+  flex-shrink: 0;
+}
+.review-item__checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--soil-dark, #4a7c59);
+}
+
+/* Pending-tag proposals section: independent batch selection from submissions */
+.review-item__tags-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-warm, #e0d8cc);
+  /* 独占整行：不与其他 submission 卡片（各 50% 宽）挤在同一行 */
+  flex: 1 1 100%;
+  width: 100%;
+}
+.review-item__tags-header {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink, #333);
+  margin: 0 0 8px;
+}
+.review-item__tags-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.review-item__tags-controls .batch-select-all {
+  margin-left: 0;
+}
+.review-item__tags-list .review-item {
+  margin-bottom: 8px;
+  width: 100%;   /* 每个 tag proposal 占满整行，文字与 Approve/Reject 按钮不再溢出 */
+}
+.review-item__tag-checkbox {
+  display: flex;
+  align-items: flex-start;
+  padding: 8px 8px 0 0;
+  flex-shrink: 0;
+}
+.review-item__tag-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--soil-dark, #4a7c59);
+}
+
+/* === 响应式 — 860px 断点（国家卡片 6 列 → 4 列） === */
+/* 6 列的宽度下限是算出来的，不是拍的：容器是 max-width 900 且左右各 24 padding，
+   所以内容宽 = min(900, 视口) − 48；减去 5×12 的间隙再除以 6 就是单卡宽。
+   视口 828px 时单卡正好 120px，再窄就挤了，于是断点落在 860 留一点余量。
+   ⚠️ 换成固定列数后就**不能**再依赖 auto-fill 自适应了 —— 每个档位都必须显式写，
+   漏一档会直接挤成 6 条细柱（auto-fill 以前是替我们兜着这件事的）。 */
+@media (max-width: 860px) {
+  .countries__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* === 响应式 — 767px 断点（平板竖屏） === */
+@media (max-width: 767px) {
+  /* 导航栏 */
+  .nav { flex-wrap: wrap; gap: 8px; padding: 10px 16px; }
+  .nav__links { flex-wrap: wrap; }
+  /* 主题按钮在窄屏必须**摘出文档流**。
+     `.nav` 在这一档本来就 flex-wrap（logo 一行、链接一行），而链接行已经占满整行 ——
+     实测单卡需要 343px 而可用只有 358px。多一个 36px 的按钮就把链接行顶到第二行：
+     导航高度 87px → 127px，手机上白占 40px，而且还是 sticky 的。
+     钉到右上角即可 —— 那一行只有 logo，右侧本来就是空的。
+     ⚠️ 这条写在 .nav__theme 基准（第 990 行）**之后**，所以真的生效；
+     写在前面的响应式块里会静默失效（见 quality-guidelines 那条）。 */
+  .nav__theme { position: absolute; top: 10px; right: 16px; margin-left: 0; }
+
+  /* 弹窗 — 平板改为上下布局。宽度是这一档的形状，高度沿用顶层的 75dvh。 */
+  .modal { width: 92vw; }
+  .modal__body { flex-direction: column; }
+  /* 上下堆叠时两列怎么分高度 —— 这里曾经是整轮改动里最隐蔽的一个坑。
+     .modal__left 用 flex: 1（即 flex-basis: 0）配 .modal__right 的 min-height: 260px，
+     容器高度不够时收缩量会**全部落在右栏**（左栏 scaled shrink factor = 1 x 0 = 0），
+     而右栏被 min-height 钉住不让缩 —— 净效果是左栏归零，再被 .modal__body 的
+     overflow: hidden 裁掉。实测 350% 缩放下左栏只剩 32px，正好是它自己的上下内边距，
+     笔记正文一个字都看不见，而右边那个还没加载出来的街景占位框稳稳占着 260px。
+     修法是把两列的职责分开：右栏不参与伸缩、高度由比例决定；左栏吃掉剩下的，
+     且允许被压到内容以下（靠自身 overflow-y: auto 滚动兜住）。这样谁也不会把谁挤到 0。 */
+  .modal__left { flex: 1 1 auto; min-height: 0; }
+  /* 街景那一侧的高度：min(一半, 260px)。**故意不设下限。**
+     上限 260px —— 街景自己的界面件（Google 地点卡 66px + 圆点条 72px + 箭头 44px）
+     到这个高度就摆得下了（实测下限约 194px），再高只是浪费正文的地方。
+     一半 —— 两边均分。曾经这里写的是固定 40%，结果 767x700 视口下街景只有 179px，
+     箭头撞上地点卡 —— 街景的界面件是**绝对 px** 尺寸，不会跟着比例缩，
+     所以给它分高度时必须先满足那 194px 的硬需求。
+     反过来，矮视口下也不能给它硬撑一个下限：试过 clamp(120px, 50%, 260px)，
+     350% 缩放下容器只有 163px，120px 的下限把正文挤回 43px，
+     等于把刚修好的塌陷换了个方向重演。空间不够时两边一起等比缩才是对的。 */
+  .modal__right { flex: 0 0 auto; height: min(50%, 260px); }
+  .modal__gallery { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+  /* 提交页 */
+  .submit-layout { flex-direction: column; }
+  .submit-layout__map { height: 45vh; }
+  .submit-layout__form { flex: auto; border-left: none; border-top: 1px solid var(--border-warm); max-width: none; }
+
+  /* 审核页 */
+  #review-list { flex-direction: column; }
+  .review-item { flex: 1 1 100%; flex-direction: column; }
+  #my-results .review-item { flex: 1 1 100%; flex-direction: column; }
+  .review-item__map { flex: 0 0 160px; width: 100%; }
+  .batch-bar { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .batch-bar .review-btn--approve,
+  .batch-bar .review-btn--reject,
+  .batch-bar .review-btn--undo { font-size: 12px; padding: 6px 12px; ; }
+}
+
+/* === 响应式 — 680px 断点（平板竖屏 / 大屏手机） === */
+@media (max-width: 680px) {
+  /* 首页 */
+  .hero__title { font-size: 32px; }
+  .countries__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+  /* 弹窗 */
+  .modal__left { border-right: none; }
+  /* 右栏的高度分配已由 767px 断点统一决定，这里不再覆盖 —— 两处数值不一致
+     正是上面那个塌陷的成因之一。 */
+  .modal__gallery { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+  .modal__close { ; ; font-size: 22px; }
+
+  /* 提交页 */
+  .submit-layout__map { height: 40vh; }
+  .submit-layout__form { flex: 1; border-left: none; border-top: 1px solid var(--border-warm); }
+
+  /* 审核页 */
+  .review-layout { padding: 12px; max-height: calc(100vh - 44px); }
+  .review-item__map { flex: 0 0 140px; width: 100%; }
+  .batch-bar { flex-wrap: wrap; gap: 6px; padding: 8px 10px; border-radius: 6px; }
+  .batch-bar__count { font-size: 12px; }
+  .batch-bar .review-btn--approve,
+  .batch-bar .review-btn--reject,
+  .batch-bar .review-btn--undo { font-size: 11px; padding: 5px 10px; ; }
+
+  /* tab 触控目标放大 */
+  .review-tab { ; display: inline-flex; align-items: center; white-space: nowrap; }
+  .country-tab { ; display: inline-flex; align-items: center; }
+
+  .compare-overlay__body { flex-direction: column; }
+
+  .compare-col {
+    border-right: none;
+    border-bottom: 1px solid var(--border-warm, #e0d8cc);
+    flex: none;
+    min-height: 50vh;
+  }
+
+  .compare-col:last-child { border-bottom: none; }
+
+  .compare-col__streetview {
+    height: 35vh;
+    min-height: 200px;
+  }
+
+  .compare-bar {
+    bottom: 70px;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    border-radius: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+    text-align: center;
+  }
+}
+
+/* === 响应式 — 600px 断点（大屏手机横屏 / 小平板） === */
+@media (max-width: 600px) {
+  .hero__title { font-size: 36px; }
+  .hero__subtitle { font-size: 16px; }
+  .hero { min-height: 45vh; padding: 32px 20px; }
+
+  .countries__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+  /* 弹窗尺寸由顶层与 767px 断点决定，这一档只管排版 */
+  .modal__title { font-size: 18px; }
+  .modal__header { padding: 12px 16px; }
+  .modal__left { padding: 16px; }
+
+  .review-item__name { font-size: 16px; }
+}
+/* === 响应式 — 500px 断点（小屏手机） === */
+@media (max-width: 500px) {
+  .batch-bar { flex-wrap: wrap; gap: 6px; padding: 8px 12px; }
+  .batch-bar__count { font-size: 12px; width: 100%; }
+  .batch-bar .review-btn--approve,
+  .batch-bar .review-btn--reject,
+  .batch-bar .review-btn--undo { font-size: 11px; padding: 4px 10px; ; }
+}
+/* === 响应式 — 400px 断点（iPhone SE 等小屏） === */
+@media (max-width: 400px) {
+  .batch-bar { flex-wrap: wrap; gap: 4px; padding: 6px 8px; border-radius: 6px; bottom: 8px; }
+  .batch-bar__count { font-size: 11px; width: 100%; }
+  .batch-bar .review-btn--approve,
+  .batch-bar .review-btn--reject,
+  .batch-bar .review-btn--undo { font-size: 10px; padding: 3px 8px; ; }
+}
+
+/* Shared dropdown base — used by tag-dropdown & country-filter */
+.tag-dropdown,
+.country-filter {
+  position: relative;
+  display: inline-block;
+}
+.country-filter { vertical-align: middle; }
+.country-filter[hidden] { display: none; }
+
+/* --- shared __btn --- */
+.tag-dropdown__btn,
+.country-filter__btn {
+  padding: 8px 14px;
+  border: 1px solid var(--ink-faded);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-body);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: var(--compact);
+}
+.country-filter__btn:hover { background: var(--paper-light); }
+
+/* My Submissions toolbar — match button styling */
+.sort-toggle {
+  padding: 8px 14px;
+  border: 1px solid var(--ink-faded);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-body);
+  white-space: nowrap;
+  min-height: var(--compact);
+  display: inline-flex;
+  align-items: center;
+}
+.sort-toggle:hover { background: var(--paper-light); }
+.country-filter__btn::after {
+  content: '\25BE';
+  font-size: 10px;
+  color: var(--ink-subtle);
+}
+
+/* --- shared __badge --- */
+.tag-dropdown__badge,
+.country-filter__badge {
+  background: var(--terracotta-fill);
+  color: #fff;
+  font-size: 10px;
+  border-radius: 10px;
+  padding: 0 5px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 16px;
+}
+
+/* --- shared __menu --- */
+.tag-dropdown__menu,
+.country-filter__menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 1000;
+  background: var(--paper-light);
+  border: 1px solid var(--ink-faded);
+  border-radius: 4px;
+  padding: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+.tag-dropdown__menu { min-width: 150px; }
+.country-filter__menu { min-width: 180px; }
+.tag-dropdown.is-open .tag-dropdown__menu,
+.country-filter.is-open .country-filter__menu { display: block; }
+
+/* --- shared __item --- */
+.tag-dropdown__item,
+.country-filter__item {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: var(--compact);
+}
+.country-filter__item {
+  border-radius: 3px;
+  color: var(--ink-charcoal);
+  font-family: var(--font-body);
+}
+.tag-dropdown__item:hover,
+.country-filter__item:hover { background: var(--surface-hover); }
+.tag-dropdown__item input { margin-right: 4px; }
+.country-filter__item.is-selected {
+  background: rgba(var(--soil-rgb), 0.08);
+  font-weight: 600;
+}
+
+/* Tag selector (submit page) */
+.tag-selector { margin-bottom: 8px; }
+.tag-selector select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--ink-faded);
+  border-radius: 4px;
+  background: var(--paper-light);
+  font-size: 14px;
+  min-height: var(--mid);
+  margin-bottom: 8px;
+}
+.tag-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 8px; }
+.selected-tags { margin-bottom: 8px; }
+.toggle-propose {
+  background: none;
+  border: 1px dashed var(--ink-faded);
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 13px;
+  color: var(--ink-faded);
+  cursor: pointer;
+  width: 50%;
+  text-align: left;
+  min-height: var(--mid);
+}
+.toggle-propose:hover { color: var(--ink-charcoal); border-color: var(--ink-charcoal); }
+.propose-tags {
+  margin-top: 8px;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid var(--border-warm);
+  border-radius: 6px;
+  background: var(--paper-warm);
+}
+.propose-tags input,
+.propose-tags select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--ink-faded);
+  border-radius: 4px;
+  font-size: 16px;
+  min-height: var(--mid);
+  margin-bottom: 6px;
+}
+/* 同上：这一组里的 input 保持 16px，只把 select 收小一号 */
+.propose-tags select { font-size: 14px; }
+.add-proposed {
+  background: var(--terracotta-fill);
+  color: #fff;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  min-height: var(--mid);
+}
+.propose-error {
+  font-size: 12px;
+  color: var(--feedback-red);
+  margin: 2px 0 6px;
+}
+.proposed-list { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.tag-chip.is-proposed {
+  border-style: dashed;
+  background: #fff8e1;
+}
+.proposed-remove {
+  background: none;
+  border: none;
+  color: var(--feedback-red);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0 0 6px;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* Tag manager (review page) */
+.tag-manager { max-width: 600px; }
+.tag-manager__section {
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e0dcd0;
+}
+.tag-manager__section h3 { margin-bottom: 10px; font-size: 16px; }
+.tag-manager__row { display: flex; gap: 8px; margin-bottom: 8px; }
+.tag-manager__row input,
+.tag-manager__row select {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid var(--ink-faded);
+  border-radius: 4px;
+  font-size: 16px;
+  min-height: var(--mid);
+}
+.tag-manager__row button,
+.tag-manager__section > button {
+  background: var(--soil-mid-fill);
+  color: #fff;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  min-height: var(--mid);
+}
+/* tag manager 的 reload 与第一个 section 的标题同行、贴最右 —— 它没有面板标题，
+   所以借「Create Category」这一行当标题行，形状与 users / audit / notes / countries / analytics
+   五个面板一致（左标题、右 reload）。
+   选择器比 `.tag-manager__section h3` 多一层，是为了压掉它的 margin-bottom 时不依赖源码顺序
+   （两者同层的写法只差一个类，谁在后面谁赢，太脆）。 */
+.tag-manager .tag-manager__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tag-manager .tag-manager__heading h3 { margin-bottom: 0; }
+
+.tag-manager__section > textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--ink-faded);
+  border-radius: 4px;
+  font-size: 16px;
+  min-height: var(--mid);
+  margin-bottom: 8px;
+  resize: vertical;
+}
+.tag-manager__category { margin-bottom: 12px; }
+.tag-manager__cat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.tag-manager__tags { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Map control buttons — the reset/contrib/expand trio, plus the explore map-tools pair
+   (search + tag filter). The two tools are IN this group rather than carrying a look of their
+   own: they sit in the same Leaflet column, so "identical to the neighbours" is the requirement,
+   and sharing one rule is what makes that true by construction instead of by hand-alignment. */
+.map-reset-btn, .map-contrib-btn, .map-expand-btn,
+.search-chip__toggle, .tag-filter__toggle {
+  width: var(--mid);
+  height: var(--mid);
+  background: #fff;
+  border: 2px solid rgba(0,0,0,0.2);
+  border-radius: 4px;
+  font-size: 20px;
+  line-height: var(--mid);
+  text-align: center;
+  cursor: pointer;
+  /* ⚠️ 必须用 --ink-fill（深色下**不覆盖**），不能用 --ink-charcoal。
+     这几个钮的底盘是上面那行写死的 #fff —— 因为底图已决策保持浅色，它们也跟着保持白。
+     既然底盘不翻，前景色就**不能翻**：用 --ink-charcoal 的话深色下会变成 #ece5d8 米白，
+     白底米白字形，看着就像禁用态。--ink-fill 正是为「衬在浅色面上的深色前景」准备的。
+     对照组：紧挨着它们的 Leaflet 自带 +/- 用 leaflet.css 的 color:black，深色下依然黑字；
+     我们画的钮跟成一样的才是对的。 */
+  color: var(--ink-fill);
+  padding: 0;
+}
+.map-reset-btn:hover, .map-contrib-btn:hover, .map-expand-btn:hover,
+.search-chip__toggle:hover, .tag-filter__toggle:hover { background: #f2f2f2; }
+
+/* Contributors overview panel */
+.contrib-panel {
+  position: fixed;
+  z-index: 2000;
+  width: 220px;
+  max-height: calc(100vh - 16px);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+.contrib-panel[hidden] { display: none; }
+.contrib-panel__header {
+  flex: none;   /* 视口不够高时只让列表收缩，标题/操作栏不参与挤压 */
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border-warm);
+}
+.contrib-panel__title { font-weight: 600; font-size: 14px; color: var(--ink-charcoal); }
+.contrib-panel__subtitle { font-size: 12px; color: var(--ink-faded); }
+.contrib-panel__close {
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-faded);
+}
+.contrib-panel__close:hover { color: var(--ink-charcoal); }
+.contrib-panel__actions {
+  flex: none;   /* 同 header：固定，不参与挤压 */
+  display: flex;
+  gap: 6px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border-warm);
+}
+.contrib-panel__action {
+  flex: 1;
+  border: 1px solid var(--border-warm);
+  background: none;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  cursor: pointer;
+  color: var(--ink-faded);
+}
+.contrib-panel__action:hover { color: var(--soil-dark, #4a7c59); border-color: var(--soil-dark, #4a7c59); }
+.contrib-panel__action[hidden] { display: none; }
+/* 列表是这一列里唯一可以被挤压的部分：头两栏固定，剩下的空间（含被 max-height 压掉的部分）
+   全由它吸收，再靠 overflow-y 滚动。没有 `min-height: 0` 的话 flex 项不会缩到内容高度以下，
+   positionContribPanel 往上收的 max-height 就传不到列表里 —— 结果是面板被压扁、列表却不滚。 */
+.contrib-panel__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; max-height: 320px; padding: 6px 0; }
+.contrib-panel__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 12px;
+  font-size: 13px;
+}
+.contrib-panel__name {
+  color: var(--ink-charcoal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+.contrib-panel__count { color: var(--ink-faded); white-space: nowrap; }
+.contrib-panel__status { padding: 12px; font-size: 13px; color: var(--ink-faded); }
+.contrib-panel__row--has-note { cursor: pointer; flex-wrap: wrap; }
+.contrib-panel__row--has-note:hover { background: var(--paper-dark, #f3efe9); }
+.contrib-panel__note-marker { margin-left: 4px; color: var(--soil-dark, #4a7c59); }
+.contrib-panel__filter {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--ink-faded);
+}
+.contrib-panel__filter:hover { color: var(--soil-dark, #4a7c59); }
+.contrib-panel__filter.is-active { color: var(--soil-dark, #4a7c59); }
+.contrib-panel__row.is-filtered { background: rgba(74, 124, 89, 0.08); }
+.contrib-panel__note {
+  flex-basis: 100%;
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-warm);
+  font-size: 12px;
+  color: var(--ink-faded);
+  white-space: pre-wrap;
+  word-break: break-word;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.contrib-panel__note[hidden] { display: none; }
+.contrib-panel__note-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--soil-dark, #4a7c59);
+  margin-bottom: 2px;
+  user-select: none;
+}
+.contrib-panel__note-text {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* === Nav login / user menu === */
+.nav__link--login {
+  background: #5865F2;  /* Discord blurple */
+  color: #fff !important;
+  border-radius: var(--radius);
+  padding: 6px 16px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+.nav__link--login:hover {
+  background: #4752C4;
+  color: #fff !important;
+}
+
+.nav__user-menu {
+  position: relative;
+  margin-left: 8px;
+}
+.nav__user-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--mid);
+  height: var(--mid);
+  border-radius: 50%;
+  border: 2px solid var(--border-warm, #e0d8cc);
+  background: var(--paper-light, #faf8f3);
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink-charcoal, #333);
+  font-family: var(--font-body);
+  padding: 0;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.nav__user-btn:hover {
+  border-color: var(--ink-muted, #888);
+}
+.nav__avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.nav__dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--paper-light, #faf8f3);
+  border: 1px solid var(--border-warm, #e0d8cc);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  min-width: 180px;
+  z-index: 4000;
+  padding: 8px 0;
+}
+.nav__dropdown.is-open {
+  display: block;
+}
+.nav__dropdown-logout {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  color: var(--ink-charcoal, #333);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: background 0.15s;
+  min-height: var(--mid);
+}
+.nav__dropdown-logout:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+.nav__dropdown-link {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 8px 16px;
+  text-align: left;
+  font-size: 14px;
+  color: var(--ink-charcoal);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  min-height: var(--mid);
+}
+
+.nav__dropdown-link:hover {
+  background: var(--paper-warm);
+}
+
+/* === Login gate === */
+#login-gate {
+  max-width: 480px;
+  margin: 60px auto;
+}
+#login-gate h2 {
+  font-size: 22px;
+  margin-bottom: 12px;
+  font-family: var(--font-heading, 'Merriweather', serif);
+  color: var(--ink-charcoal, #333);
+}
+#login-gate p {
+  color: var(--ink-muted, #888);
+  margin-bottom: 24px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+/* === Global Button Styles === */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+  transition: background 0.15s;
+  min-height: var(--mid);
+  padding: 8px 20px;
+}
+.btn--secondary {
+  background: var(--border-warm);
+  color: var(--ink);
+}
+.btn--secondary:hover {
+  background: var(--surface-sand);
+}
+
+#login-gate .btn--primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 28px;
+  background: #5865F2;
+  color: #fff;
+  border-radius: var(--radius);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+  font-family: var(--font-body);
+  transition: background 0.15s;
+  min-height: var(--mid);
+}
+#login-gate .btn--primary:hover {
+  background: #4752C4;
+}
+/* === Status badges === */
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.status-badge--pending {
+  background: #FFF3CD;
+  color: #856404;
+}
+.status-badge--approved {
+  background: #D4EDDA;
+  color: #155724;
+}
+.status-badge--rejected {
+  background: #F8D7DA;
+  color: #721C24;
+}
+.status-badge--trusted {
+  background: #D6EAF8;
+  color: #1A5276;
+}
+
+/* === Fullscreen state === */
+.modal__right:fullscreen,
+.modal__right:-webkit-full-screen,
+.modal__right:-moz-full-screen {
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal__right:fullscreen .modal__iframe,
+.modal__right:-webkit-full-screen .modal__iframe,
+.modal__right:-moz-full-screen .modal__iframe {
+  width: 100vw;
+  height: 100vh;
+}
+.modal__right:fullscreen .modal__streetview-hint,
+.modal__right:-webkit-full-screen .modal__streetview-hint,
+.modal__right:-moz-full-screen .modal__streetview-hint {
+  display: none;
+}
+
+/* === Fullscreen hint === */
+.sv-key-catcher {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
+  outline: none;
+}
+
+.fs-exit-hint {
+  display: block;
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  z-index: 10;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  border-radius: 6px;
+  pointer-events: none;
+}
+
+/* === Compare Floating Bar === */
+
+.compare-bar {
+  position: fixed;
+  bottom: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3000;
+  background: var(--soil-dark, #2d5a3d);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  white-space: nowrap;
+}
+
+.compare-bar__label { font-size: 13px; }
+.compare-bar__label strong { font-weight: 700; }
+
+.compare-bar__hint {
+  font-size: 12px;
+  opacity: 0.8;
+  font-style: italic;
+}
+
+.compare-bar__dismiss {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  min-width: var(--mid);
+  min-height: var(--mid);
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.compare-bar__dismiss:hover { opacity: 1; }
+
+/* === Compare Overlay === */
+
+.compare-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  background: var(--paper-warm, #f5f0e3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.compare-overlay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-warm, #e0d8cc);
+  background: var(--paper-light, #fdfaf3);
+  flex-shrink: 0;
+}
+
+.compare-overlay__title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  margin: 0;
+  color: var(--ink-charcoal, #2c2416);
+}
+
+.compare-overlay__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Shared icon-button base for overlay & modal controls */
+.icon-btn {
+  background: none;
+  border: 1px solid var(--border-warm, #e0d8cc);
+  border-radius: var(--radius, 6px);
+  cursor: pointer;
+  padding: 4px 10px;
+  color: var(--ink-charcoal, #2c2416);
+  line-height: 1;
+  min-width: var(--mid);
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.icon-btn:hover {
+  background: rgba(var(--soil-rgb), 0.08);
+}
+
+.compare-overlay__swap,
+.compare-overlay__close {
+  font-size: 20px;
+}
+
+.compare-overlay__swap:hover,
+.compare-overlay__close:hover {
+  background: rgba(var(--soil-rgb), 0.08);
+}
+
+.compare-overlay__body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* === Compare Column === */
+
+.compare-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 16px;
+  border-right: 1px solid var(--border-warm, #e0d8cc);
+}
+
+.compare-col:last-child { border-right: none; }
+
+.compare-col__name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  margin: 0 0 12px 0;
+  color: var(--soil-dark, #2d5a3d);
+  flex-shrink: 0;
+}
+
+.compare-col__streetview {
+  position: relative;
+  width: 100%;
+  height: 50vh;
+  min-height: 240px;
+  background: #e0d8cc;
+  border-radius: var(--radius, 6px);
+  overflow: hidden;
+  margin-bottom: 14px;
+  flex-shrink: 0;
+}
+
+.compare-col__iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.compare-col__no-sv {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--ink-faded, #7a7265);
+  font-size: 14px;
+}
+
+.compare-col__desc {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-charcoal, #2c2416);
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.compare-col__desc p { margin: 0 0 8px 0; }
+
+.compare-col__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.compare-col__reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.compare-col__tag {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(74, 124, 89, 0.1);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--soil-dark, #2d5a3d);
+}
+
+/* === Compare carousel (multi-streetview) === */
+
+.comp-carousel {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.comp-carousel__viewport {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.comp-carousel__arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--mid); height: var(--mid);
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, opacity 0.2s;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0;
+  pointer-events: auto;
+}
+/* Same rule as the explore carousel: a centred pair along the bottom, above the dots.
+   Google's right-hand control column (zoom 24–105px above the bottom, 10–58px in from the right)
+   rules out the bottom-right corner, so the pane's midline is where the pair goes. Its dots are
+   8px tall at bottom: 8px, so the arrows clear them at bottom: 24px. 36px arrows + 8px gap = 80px
+   total → the pair spans 50%−40px … 50%+40px. */
+.comp-carousel__arrow--left  { top: auto; bottom: 24px; left: calc(50% - 40px); right: auto; transform: none; }
+.comp-carousel__arrow--right { top: auto; bottom: 24px; left: calc(50% + 4px);  right: auto; transform: none; }
+.comp-carousel:hover .comp-carousel__arrow,
+.comp-carousel__arrow:focus-visible { opacity: 1; }
+.comp-carousel__arrow:hover { background: rgba(0, 0, 0, 0.6); }
+.comp-carousel__arrow--disabled {
+  opacity: 0.2 !important;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Counter — centered above each column's street view */
+.comp-carousel__counter {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+/* Dots */
+.comp-carousel__dots {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.comp-carousel__dot {
+  width: 8px; height: 8px;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.45);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  pointer-events: auto;
+}
+.comp-carousel__dot.is-active {
+  background: rgba(255, 255, 255, 0.95);
+  transform: scale(1.2);
+}
+
+/* Placeholder */
+.comp-carousel__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: var(--ink-subtle, #8b7e6a);
+  background: #e0d8cc;
+  width: 100%;
+  height: 100%;
+}
+.comp-carousel__placeholder[hidden] { display: none; }
+.comp-carousel__placeholder:not([hidden]) {
+  display: flex;
+}
+.comp-carousel__placeholder-icon { font-size: 24px; }
+.comp-carousel__placeholder-text {
+  font-size: 12px;
+  margin: 0;
+  color: var(--ink-subtle, #8b7e6a);
+}
+
+.comp-carousel__arrow[hidden],
+.comp-carousel__dots[hidden],
+.comp-carousel__counter[hidden] { display: none; }
+
+/* Always show arrows on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .comp-carousel__arrow { opacity: 1; }
+
+  .sv-carousel__arrow { opacity: 1; }
+}
+
+/* === Compare responsive: mobile stack === */
+
+/* === Modal Compare Button === */
+
+.modal__compare-btn {
+  font-size: 14px;
+  margin-right: 4px;
+  background: rgba(var(--soil-rgb, 74,124,89), 0.08);
+  color: var(--soil-dark, #2d5a3d);
+  border-color: rgba(var(--soil-rgb, 74,124,89), 0.2);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+/* 无底色、无框 —— 与 /my-submissions 的卡片动作行同一副样子（用户 2026-10-02 要求：
+   「不要底色不要框」）。`.icon-btn` 给的 `border: 1px solid var(--border-warm)`
+   与这里原本那层 soil 淡底都要显式撤掉。
+   box-sizing 是 border-box 且宽高写死 --mid(36px)，所以去边框只是让内容区变回 36px，
+   盒子本身不会缩（同 :3531 那条的先例）。 */
+.modal__edit-btn,
+.modal__share-btn {
+  font-size: 14px;
+  margin-right: 4px;
+  background: none;
+  border: 0;
+  color: var(--soil-dark, #2d5a3d);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 0.15s, color 0.15s;
+  cursor: pointer;
+}
+
+.modal__compare-btn:hover {
+  background: var(--soil-dark, #2d5a3d);
+  color: #fff;
+  border-color: var(--soil-dark, #2d5a3d);
+}
+
+/* hover 用淡底而不是实心填充 —— 与卡片动作行一致（那边也是 --paper-warm 淡染）。
+   实心填充在没有框的按钮上是一次过大的跳变。 */
+.modal__edit-btn:hover,
+.modal__edit-btn:focus-visible,
+.modal__share-btn:hover,
+.modal__share-btn:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark, #2d5a3d);
+}
+
+.modal__edit-btn,
+.modal__share-btn {
+  text-decoration: none;
+  /* 从文字按钮改成图标按钮：盒子里不再有文字基线要撑，所以去掉横内边距让盒子
+     回到 --mid（36px）的正方形，字形 18px 与 /my-submissions 的卡片动作行同尺寸。
+     不写 padding:0 的话 `.icon-btn` 的 `padding: 4px 10px` 会把盒子撑成 38×36。 */
+  padding: 0;
+  width: var(--mid);
+  height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.modal__edit-btn svg,
+.modal__share-btn svg { width: 18px; height: 18px; display: block; }
+
+/* === Hover Card Compare Button === */
+
+.region-hover-card__compare {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 12px;
+  min-height: var(--mid);
+  background: var(--soil-dark, #2d5a3d);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.region-hover-card__compare:hover {
+  background: var(--soil-mid, #4a7c59);
+}
+
+/* 缩放控件要比同列那四个宽 4px：Leaflet 给 `.leaflet-touch .leaflet-bar` 加了一圈 2px 边框，
+   而边框落在 44px 内容**之外**（锚点是 `min-width: 44px`），于是外框量出来 48×92，
+   旁边 .map-reset-btn 那组是 44×44（含 2px 边框）。触摸环境把锚点收到 40px 补回那 4px。
+   ⚠️ 只在 `.leaflet-touch` 下收：非触摸环境 Leaflet 不给 .leaflet-bar 加边框，锚点就该保持 44px。
+   字号同理 —— Leaflet 触摸环境写 22px、非触摸写 bold 18px，而这一列统一是 20px。
+   两条规则都要写：Leaflet 那条是按 `.leaflet-control-zoom-in/-out` 下的（0,2,0），
+   单靠 `.leaflet-control-zoom a`（0,1,1）压不住它。 */
+.leaflet-control-zoom a { font-size: 20px; }
+.leaflet-touch .leaflet-control-zoom a { font-size: 20px; width: calc(var(--mid) - 4px); min-width: calc(var(--mid) - 4px); }
+
+/* === Map control touch targets === */
+.map-reset-btn,
+.map-contrib-btn,
+.map-expand-btn,
+.search-chip__toggle,
+.tag-filter__toggle,
+.leaflet-control-zoom a {
+  min-width: var(--mid);
+  min-height: var(--mid);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 500px) {
+  /* Modal fullscreen on mobile */
+  .modal {
+    border-radius: 0;
+    width: 100dvw;
+    height: 100dvh;
+    top: 0;
+    left: 0;
+    transform: none;
+  }
+  .modal.is-open {
+    transform: none;
+  }
+  .modal__body { flex-direction: column; }
+  .modal__left,
+  .modal__right {
+    width: 100%;
+    min-width: 0;
+  }
+  .modal__right {
+    flex: 0 0 auto;
+    height: 45dvh;
+    /* 240px 的硬下限在矮视口下会重演同一个塌陷（视口只有 216px 高时它比整个弹窗还高），
+       改用纯比例。 */
+    min-height: 0;
+  }
+  .modal__close {
+    min-width: var(--mid);
+    min-height: var(--mid);
+    font-size: 28px;
+    padding: 0 8px;
+  }
+}
+
+/* === Mobile Warning Banner === */
+
+.mobile-warning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: var(--radius, 6px);
+  font-size: 13px;
+  color: #e65100;
+  margin-bottom: 16px;
+  font-family: var(--font-body);
+}
+
+.mobile-warning__dismiss {
+  background: none;
+  border: none;
+  color: #e65100;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  flex-shrink: 0;
+  min-width: var(--mid);
+  min-height: var(--mid);
+}
+
+@media (min-width: 681px) {
+  .mobile-warning { display: none; }
+}
+
+/* === Homepage Recent Updates === */
+
+.recent-updates {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 0 20px;
+  transition: opacity 0.35s ease;
+}
+
+.recent-updates__title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink-charcoal, #2c2416);
+  margin-bottom: 16px;
+}
+
+/* 标题 + 筛选同一行（手法同 #most-contributed 的 .constellation__header）。
+   wrap 是兜底：390px 上标题与两个按钮并排放不下时，筛选整块落到第二行，
+   而不是把标题挤成两行。 */
+.recent-updates__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+/* 行距由 header 接管，标题自己那条 16px 下边距会让整行多出 16px */
+.recent-updates__header .recent-updates__title { margin-bottom: 0; }
+
+/* 按钮复用 .view-toggle__btn —— 配色、边框、选中态与首页 map/cards 同源。
+   这里只覆盖 .view-toggle 那套"居中、独占一行"的布局属性。 */
+.recent-updates__filter {
+  justify-content: flex-end;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+.recent-updates__filter .view-toggle__btn { padding: 0 16px; }
+
+.recent-updates__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.recent-update-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--paper-light, #fdfaf3);
+  border: 1px solid var(--border-warm, #e0d8cc);
+  border-radius: var(--radius, 8px);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.15s;
+}
+
+.recent-update-item:hover {
+  background: rgba(74, 124, 89, 0.04);
+}
+
+.recent-update-item__icon {
+  font-size: 10px;
+  flex-shrink: 0;
+  color: var(--soil-mid);
+  line-height: 1;
+}
+/* 国家范围（scope === 'country'）的标记。必须比 ● 更大更重 —— 10px 下 ★ 与 ● 几乎
+   分不出来，只换字符等于没区分。宽度固定，两类条目的名称列才不会左右错开。 */
+.recent-update-item__icon--country {
+  font-size: 12px;
+  color: var(--soil-dark);
+  width: 12px;
+  text-align: center;
+}
+
+.recent-update-item__name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink-charcoal, #2c2416);
+  flex: 1;
+}
+
+.recent-update-item__country {
+  font-size: 12px;
+  color: var(--ink-faded, #7a7265);
+  flex-shrink: 0;
+}
+
+.recent-update-item__date {
+  font-size: 12px;
+  color: var(--ink-faded, #7a7265);
+  flex-shrink: 0;
+}
+
+.recent-updates__loading,
+.recent-updates__empty {
+  text-align: center;
+  padding: 20px;
+  color: var(--ink-faded, #7a7265);
+  font-size: 14px;
+}
+
+/* 未登录提示：文案口径与 submit / profile / my-submissions 的 #login-gate 一致，
+   只去掉那边的大标题、并把按钮从"整行宽"收成自然宽 —— 首页区块里 900px 宽的
+   绿色按钮太重。两个规则都刻意不写 display：这一块靠 hidden 属性开关，
+   一旦在这里声明 display 会盖掉 [hidden] 的 display:none（.view-toggle[hidden]
+   那条就是为此补的）。 */
+.recent-updates__gate {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+.recent-updates__gate p {
+  color: var(--ink-faded, #7a7265);
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+.recent-updates__gate .form-submit {
+  width: auto;
+  padding: 10px 24px;
+  text-decoration: none;
+  display: inline-block;
+}
+
+/* 鼓励语（0 条已批准 / 只提交过 1 个国家且 ≤3 条）。与 .recent-updates__empty 同档
+   字号配色，区别只是它跟在列表下面，所以上边距比 empty 小。同样不写 display。 */
+.recent-updates__note {
+  text-align: center;
+  padding: 16px 20px 4px;
+  color: var(--ink-faded, #7a7265);
+  font-size: 14px;
+}
+.recent-updates__note a {
+  color: var(--soil-dark);
+  text-decoration: underline;
+}
+
+@media (max-width: 500px) {
+  .recent-update-item { flex-wrap: wrap; }
+  .recent-update-item__date { width: 100%; padding-left: 28px; }
+  .recent-updates { padding: 0 16px; }
+  .recent-updates__title { font-size: 18px; }
+}
+
+/* === Most Useful Meta — 横向滚动卡片条 ===
+   这些类只服务 #most-useful 下的新结构。.recent-updates__list 与
+   .recent-update-item 仍归其余三个 recent-updates 区块使用，这里一行都不改。 */
+
+.useful-carousel__viewport {
+  width: 100%;
+  /* 默认 auto 而不是 hidden —— 这是故障兜底。复制/播放的判定只在渲染时算一次，没有
+     resize 钩子：宽屏载入时判定为「静态」，之后窗口缩窄，轨道就会超出视口；此处若是
+     hidden，溢出的卡片既看不到也够不到（正是 R5 要避免的情形）。宁可退化成可滚。
+     overflow-y 必须显式写：一个轴是 auto 时另一轴的 visible 会被计算成 auto，
+     会凭空给这条轨道带出纵向滚动条。 */
+  overflow-x: auto;
+  overflow-y: hidden;
+  /* 两端淡出用视口级 mask；绝不逐卡做 opacity 动画（那会强制每帧重绘） */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 40px, #000 calc(100% - 40px), transparent 100%);
+}
+
+/* 播放态才裁切：marquee 靠它只露一屏 */
+.useful-carousel__viewport--animated {
+  overflow: hidden;
+  /* touch-action 只给播放态，绝不能提到基类。非播放态视口是 overflow-x:auto，
+     原生横向触摸滚动是够到溢出卡片的唯一手段（上一条任务的 R8b 就是为了这个）；
+     基类一旦禁掉横向平移，那些卡片就彻底够不到了（design D5）。
+     缩放手势必须显式带上 pinch-zoom：pan-y 这一档按 Pointer Events 规范不含 pinch-zoom，
+     只写 pan-y 会把落在卡片条上的双指缩放一起禁掉，而改动前这里没有 touch-action、
+     缩放本来是好的 —— 那是无障碍回归，不是 D5 想要的取舍（D5 只讨论横向平移）。 */
+  touch-action: pan-y pinch-zoom;
+}
+
+/* 拖拽中禁掉文字选中：按住拖动时若不掐，浏览器会把卡片文字当作选择范围，
+   拖动变成拉选、还可能触发原生拖拽把 pointer 事件打断（design D8）。
+   只在拖动期间挂类，松手就摘 —— 平时卡片文字照常可选。 */
+.useful-carousel__viewport--dragging {
+  user-select: none;
+}
+
+.useful-carousel__track {
+  display: flex;
+  width: max-content;
+  /* position: relative 让卡片的 offsetLeft 相对轨道量，接缝断言才有意义 */
+  position: relative;
+}
+
+/* 仅当一组卡片已铺满视口、轨道被复制后才挂上。位移已改由 JS 的 rAF 接管
+   （design D1）—— 位置是绕一组宽度取模的实数，接缝之所以看不出来，是因为
+   每帧的位移都是整组宽度的整数倍平移，第二组与第一组逐像素相同。
+   will-change 也只在这里给 —— 放在基类上会让退化情形（不复制、不播放）白白占住一个
+   合成层，而那条轨道最宽能到 5000px 以上。 */
+.useful-carousel__track--animated {
+  will-change: transform;
+}
+
+/* R6 的悬停 / 键盘聚焦暂停已搬到 JS（design D6）。
+   一旦位移归 rAF 所有，CSS 的 animation-play-state 就没有东西可暂停了。 */
+
+.useful-card {
+  /* 定位上下文：卡片里有一条 .useful-card__link（position:absolute; inset:0）的
+     覆盖式主链接。少了这行，它会认最近的已定位祖先 —— 也就是
+     .useful-carousel__track（它为了量 offsetLeft 而设了 position:relative）——
+     于是每条覆盖链接都铺满整条轨道，DOM 里最后一张的那条压在最上面，
+     点任意一张卡都跳到轨道最后一张的地区。 */
+  position: relative;
+  flex: 0 0 auto;
+  width: 288px;
+  /* margin-right 而非 gap：一组 N 张 = N×300，-50% 才正好压在接缝上。
+     用 gap 时 2N 张总宽是 2N×288+(2N−1)×12，-50% 会差 6px 出现跳动。
+     接缝与单张卡多宽无关：动画是 translateX(-50%)，按轨道实宽算。 */
+  margin-right: 12px;
+  /* 132 而不是 152：tags 行去掉后内容矮了约 20px，高度跟着收，
+     否则那段空白会堆在描述和投稿人之间（meta 是 margin-top:auto）。 */
+  height: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  overflow: hidden;
+  background: var(--paper-light, #fdfaf3);
+  border: 1px solid var(--border-warm, #d9d0bc);
+  border-radius: var(--radius, 4px);
+  text-decoration: none;
+  color: inherit;
+}
+
+.useful-card:hover {
+  border-color: var(--soil-light, #7ba887);
+}
+
+.useful-card__head {
+  display: flex;
+  /* center 而不是 baseline：右端现在是国旗图片，图片按 baseline 对齐会浮到文字上方 */
+  align-items: center;
+  gap: 8px;
+}
+
+/* 国家名换成了国旗。尺寸对齐原来那行 11px 的大写国名（视觉高度接近行高） */
+.useful-card__flag {
+  flex-shrink: 0;
+  width: 22px;
+  height: auto;
+  border-radius: 2px;
+  /* 旗子比文字亮得多，压一点不透明度免得抢掉地区名 */
+  opacity: 0.9;
+}
+
+.useful-card__name {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-charcoal, #2c2416);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.useful-card__country {
+  flex-shrink: 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faded, #7a7265);
+}
+
+.useful-card__desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-faded, #7a7265);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.useful-card__meta {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-faded, #7a7265);
+}
+
+/* 计数块的**容器**：2026-10-04 起一张卡可以带多个计数（goat / heart / useful 里
+   凡 >= 2 的都显，见 index.html 的 buildUsefulCard）。这层只负责它们之间的间隔，
+   单个计数自己的样式仍是下面的 .useful-card__count。
+   flex-shrink:0 在**这一层**：名字是 flex:1 可以截断，整块计数不该被名字挤变形。 */
+.useful-card__counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.useful-card__count {
+  /* inline-flex 让 Twemoji 图和数字成一个整体，作为 head 行里 name/国旗 之外的第三个元素。 */
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--soil-dark, #2d5a3d);
+}
+
+/* Twemoji 👍。宽度按 SVG 的 1:1 自动 */
+.useful-card__thumb {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.useful-card__by {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 窄屏：卡片基准 288px，而 .recent-updates 在 ≤500px 时左右各留 16px，
+   所以视口 <320px 时内容宽已不足 288px，卡片右侧会被视口的 overflow:hidden 裁掉。
+   这档取 272px：在 320px 视口（内容宽 288px）下留 16px 余量，
+   到 304px 视口刚好贴满，再窄才会切——与改动前的下限一致，没有变差。
+   卡片宽度与接缝无关：动画是 translateX(-50%)，按轨道实宽算。 */
+@media (max-width: 400px) {
+  .useful-card { width: 272px; }
+}
+
+/* R7：全站降级规则把 animation 压成 0.01ms/1 次（且没有 animation-fill-mode），
+   所以动画结束后 transform 回落为 none —— 复制轨道停在起点，视觉上就是静态一条。
+   这一条必须盖过 --animated 的 overflow: hidden，否则视口外的卡片够不到。
+   will-change 也一并撤掉：都不动了，没必要再占着一个 5000px 宽的合成层。
+   只作用于本组新选择器。 */
+@media (prefers-reduced-motion: reduce) {
+  /* touch-action 必须一起还原成 auto。--animated 上的 pan-y 只服务「拖拽态」：
+     它把横向手势交给 JS，因为播放态视口是 overflow:hidden、没有可滚范围。
+     降级态恰恰相反 —— 这里不装拖拽处理器，位置完全交还给视口的原生滚动，
+     若还留着 pan-y，触摸用户就横向滚不动这条卡片条，屏外的卡片永远够不到
+     （上一任务的 R7 与本任务的 R10 都要求可达）。 */
+  .useful-carousel__viewport { overflow-x: auto; touch-action: auto; }
+  .useful-carousel__track--animated { will-change: auto; }
+}
+
+/* === Contributor Constellation — 首页 "Most Contributed" 头像星图 ===
+   参考实现（docs/canvas.html）是 #0f172a 深色底上的彩色光晕。直接搬到本站的
+   奶油色纸张上会三处失效：深色圆盘变成"打了个洞"、rgba(255,255,255,.25) 的环
+   完全看不见、彩色 shadowBlur 糊成一块脏斑。所以 chrome 一律中性单色，
+   颜色交给头像本身；线条/环只用 --soil-dark 一个强调色。
+   星图本体是 rAF 驱动的画布，全站的 prefers-reduced-motion 规则在这里是空操作
+   （它只压 animation/transition），降级由内联脚本里的 JS 判断承担。
+
+   参数已锁定（20 / 0.3 / 1.0 / 150px），滑杆面板是刻意移除的 —— 这里没有、
+   也不该再有 tuning UI 的样式。 */
+
+/* 标题 + 说明按钮横排，同时作为说明面板的定位上下文。
+   **那 16px 下边距从 h2 挪到了这里**：留在 h2 上的话 flex 居中会连它一起算，
+   按钮相对标题会偏上约 8px；挪过来之后标题与画布之间的间距仍是 16px，与另外三个
+   recent-updates 区块一致。 */
+.constellation__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  position: relative;   /* 说明面板的定位上下文 */
+  z-index: 2;           /* 画布是它后面的兄弟节点，不给层级会把面板盖住 */
+}
+.constellation__header .recent-updates__title { margin-bottom: 0; }
+
+.constellation__info { position: relative; }
+
+/* 无边框，只有图标本身。键盘焦点靠全站的 `button:focus-visible` 焦点环
+   （style.css:790），所以这里不另加可视边框。border: none 不改变盒子尺寸 ——
+   box-sizing 是 border-box 且宽高写死 22px，去边框只是让内容区变回 22px。 */
+.constellation__info-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--ink-faded);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.constellation__info-btn:hover,
+.constellation__info-btn[aria-expanded="true"] {
+  color: var(--soil-dark);
+}
+
+/* 面板视觉沿用 .world-map__tooltip 的纸张 / 描边 / 阴影，区别只是允许换行。
+   `[hidden]` 必须显式写 —— 下面的 width 会让它一直显示。 */
+.constellation__info-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: -6px;
+  z-index: 20;
+  width: min(340px, calc(100vw - 48px));
+  padding: 12px 14px;
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-faded);
+}
+.constellation__info-panel[hidden] { display: none; }
+.constellation__info-panel p { margin-bottom: 8px; }
+.constellation__info-panel p:last-child { margin-bottom: 0; }
+.constellation__info-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-charcoal);
+}
+
+/* 640px 固定舞台。高度史：380 → 500 → 640，每次都是为了让 20 个节点不互相叠住，
+   用户的选择始终是"抬高画布，不缩节点"。画布的 CSS 尺寸才是布局尺寸，
+   canvas.width/height 属性承载 DPR 放大后的后备缓冲 —— 两者搞混就是
+   "画布发虚"的由来。
+
+   宽度上星图会**独自突破**所在的 900px 列（见下面的媒体查询），但突破的只有
+   `.constellation__stage`：标题仍在 `.recent-updates` 的列里，所以
+   "Contributors" 与 "Most Useful Meta" 左对齐。
+   **不要把宽度加到 `#most-contributed` 上** —— 那样整块（含标题）会一起外移，
+   标题就跑到另外三个区块的列外面去了（2026-09-18 踩过）。 */
+.constellation__stage {
+  position: relative;
+  width: 100%;
+  height: 640px;
+  overflow: hidden;
+}
+
+/* 只在宽到装得下时才外扩，窄屏保持列宽 —— 否则 100% + 240px 会撑出横向滚动。
+   1200px 视口下：列内容宽 860px，两侧各外扩 120px 得到 1100px，左右各余 50px。
+   负 margin 两侧对称，所以画布中心仍与列中心对齐。 */
+@media (min-width: 1200px) {
+  .constellation__stage {
+    width: auto;
+    margin-left: -120px;
+    margin-right: -120px;
+  }
+}
+
+#constellation-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* === Profile Page === */
+.profile-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 32px 20px 60px;
+}
+
+.profile-card {
+  background: var(--paper-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.profile-card__title {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--ink-charcoal);
+  margin-bottom: 16px;
+  width: 100%;
+  text-align: left;
+}
+
+.profile-card__avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 12px;
+  border: 2px solid var(--border-warm);
+}
+
+.profile-card__username {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-charcoal);
+}
+
+.profile-card__discord-label {
+  font-size: 12px;
+  color: var(--ink-subtle);
+  margin-top: 4px;
+}
+
+.profile-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+  width: 100%;
+}
+
+.profile-stat {
+  text-align: center;
+}
+
+.profile-stat__value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--soil-mid);
+  line-height: 1.2;
+}
+
+.profile-stat__label {
+  font-size: 12px;
+  color: var(--ink-faded);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 4px;
+}
+
+.profile-rank {
+  font-size: 16px;
+  color: var(--ink-charcoal);
+}
+
+.profile-card--link {
+  flex-direction: row;
+  justify-content: space-between;
+  text-decoration: none;
+  color: var(--ink-charcoal);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.profile-card--link:hover {
+  background: var(--paper-warm);
+}
+
+.profile-card--logout {
+  color: var(--feedback-red);
+  background: transparent;
+  border-color: rgba(198, 40, 40, 0.4);
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  margin-left: auto;
+  margin-right: auto;
+}
+.profile-card--logout:hover {
+  background: rgba(198, 40, 40, 0.06);
+}
+
+/* My Submissions — compact "Edit country notes" link with hover hint */
+.country-notes-link {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 4px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-charcoal);
+  text-decoration: none;
+  position: relative;
+}
+.country-notes-link:hover {
+  color: var(--soil-dark);
+}
+.country-notes-link[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  max-width: 280px;
+  padding: 8px 11px;
+  background: var(--ink-fill);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.45;
+  border-radius: var(--radius);
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  z-index: 1000;
+}
+.country-notes-link[data-tooltip]:hover::after,
+.country-notes-link[data-tooltip]:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Country Notes card */
+#notes-card {
+  align-items: stretch;
+  text-align: left;
+}
+.notes-item {
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 2px solid #c4b694;
+}
+.notes-item:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+.notes-item:first-child {
+  border-top: 2px solid #c4b694;
+  padding-top: 18px;
+}
+.notes-item__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.notes-item__label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink-charcoal);
+}
+.notes-item__view {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.notes-item__view[hidden],
+.notes-item__editor[hidden] {
+  display: none;
+}
+.notes-item__text {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-charcoal);
+  white-space: pre-wrap;
+}
+.notes-item__text.is-empty {
+  color: var(--ink-faded);
+  font-style: italic;
+}
+.note-btn--edit {
+  flex-shrink: 0;
+  width: var(--compact);
+  height: var(--compact);
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--ink-faded);
+  border: 0;
+  border-radius: var(--radius);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.note-btn--edit svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.note-btn--edit:hover,
+.note-btn--edit:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+.notes-item textarea {
+  width: 100%;
+  min-height: 72px;
+  box-sizing: border-box;
+  display: block;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-charcoal);
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.notes-item textarea:focus {
+  outline: none;
+  border-color: var(--soil-mid);
+  box-shadow: 0 0 0 3px rgba(var(--soil-rgb), 0.14);
+}
+.notes-item__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.note-btn {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 14px;
+  min-height: var(--compact);
+  border-radius: var(--radius);
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.note-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.note-btn:focus-visible { outline: 2px solid var(--soil-mid); outline-offset: 2px; }
+.note-btn--save {
+  background: var(--soil-fill);
+  color: #fff;
+  border-color: transparent;
+}
+.note-btn--save:hover,
+.note-btn--save:focus-visible {
+  background: #1e4a2d;
+  color: #fff;
+}
+.note-btn--cancel {
+  background: transparent;
+  color: var(--ink-faded);
+  border-color: transparent;
+}
+.note-btn--cancel:hover,
+.note-btn--cancel:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+.note-btn--clear {
+  background: transparent;
+  color: var(--ink-faded);
+  border-color: transparent;
+}
+.note-btn--clear:hover,
+.note-btn--clear:focus-visible {
+  color: var(--feedback-red);
+  background: rgba(198, 40, 40, 0.08);
+}
+
+/* Profile mobile */
+@media (max-width: 500px) {
+  .profile-page {
+    padding: 20px 16px 40px;
+  }
+  .profile-card {
+    padding: 20px 16px;
+  }
+  .profile-stat__value {
+    font-size: 24px;
+  }
+}
+
+/* Street View modal */
+.sv-modal-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6); z-index: 9999;
+  display: flex; align-items: center; justify-content: center;
+}
+.sv-modal-overlay[hidden] {
+  display: none;
+}
+.sv-modal-container {
+  position: relative; width: 90vw; max-width: 900px; height: 80vh;
+  background: #fff; border-radius: 8px; overflow: hidden;
+}
+.sv-modal-close {
+  position: absolute; top: 48px; right: 12px; z-index: 10;
+  background: rgba(0,0,0,0.5); color: #fff; border: none;
+  font-size: 24px; width: var(--mid); height: var(--mid); border-radius: 50%;
+  cursor: pointer; line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.sv-modal-iframe {
+  width: 100%; height: 100%; border: none;
+}
+.sv-modal-arrow {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: var(--mid); height: var(--mid); border: none; border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35); color: #fff;
+  font-size: 28px; line-height: 1; cursor: pointer; z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0; transition: background 0.2s;
+}
+.sv-modal-arrow:hover { background: rgba(0, 0, 0, 0.6); }
+.sv-modal-arrow--left  { left: 8px; }
+.sv-modal-arrow--right { right: 8px; }
+.sv-modal-arrow--disabled {
+  opacity: 0.2; cursor: default; pointer-events: none;
+}
+.sv-modal-arrow[hidden] { display: none; }
+.sv-modal-counter {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+  z-index: 10; background: rgba(0, 0, 0, 0.5); color: #fff;
+  font-family: var(--font-body); font-size: 12px;
+  padding: 3px 10px; border-radius: 10px; pointer-events: none;
+}
+.sv-modal-counter[hidden] { display: none; }
+.review-btn--streetview {
+  padding: 3px 10px; border-radius: 4px; font-size: 12px;
+  cursor: pointer; background: #4285F4; color: #fff; border: none;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.review-btn--streetview:hover { background: #3367D6; }
+.review-btn--streetview:disabled {
+  background: var(--border-light); cursor: not-allowed; opacity: 0.6;
+}
+
+/* === Shape list sidebar (submit page) === */
+.shape-list {
+  margin-top: 12px;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  background: var(--paper-light);
+  overflow: hidden;
+}
+
+.shape-list__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-subtle);
+  background: rgba(74, 124, 89, 0.05);
+  border-bottom: 1px solid var(--border-warm);
+}
+
+.shape-list__items {
+  padding: 4px;
+}
+
+.shape-list__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.1s;
+  font-size: 13px;
+  color: var(--ink-charcoal);
+}
+
+.shape-list__item:hover {
+  background: rgba(var(--soil-rgb), 0.06);
+}
+
+.shape-list__icon {
+  display: inline-block;
+  width: 16px; height: 16px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+.shape-list__icon--line {
+  border-bottom: 2px solid var(--ink-faded);
+  height: 8px;
+}
+.shape-list__icon--poly {
+  border: 2px solid var(--ink-faded);
+  border-radius: 2px;
+  background: rgba(74, 124, 89, 0.15);
+}
+.shape-list__icon--point {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-faded);
+  margin: 4px;
+}
+
+.shape-list__label {
+  flex: 1;
+}
+
+.shape-list__delete {
+  background: none;
+  border: none;
+  color: var(--ink-subtle);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  border-radius: 3px;
+  transition: color 0.1s, background 0.1s;
+  min-width: var(--mid);
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shape-list__delete:hover {
+  color: var(--feedback-red);
+  background: rgba(198, 40, 40, 0.08);
+}
+
+.shape-list__batch-arrow {
+  background: none;
+  border: 1px solid var(--border-warm);
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 8px;
+  color: var(--ink-subtle);
+  font-family: var(--font-body);
+  transition: color 0.1s, background 0.1s, border-color 0.1s;
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+}
+
+.shape-list__batch-arrow:hover {
+  color: var(--soil-dark);
+  background: rgba(var(--soil-rgb), 0.08);
+  border-color: var(--soil-mid);
+}
+
+.shape-list__arrow-cb {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--ink-subtle);
+  cursor: pointer;
+  user-select: none;
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color 0.1s, background 0.1s;
+  min-height: var(--mid);
+}
+
+.shape-list__arrow-cb:hover {
+  color: var(--soil-dark);
+  background: rgba(var(--soil-rgb), 0.06);
+}
+
+.shape-list__arrow-cb input[type="checkbox"] {
+  accent-color: var(--soil-dark);
+  cursor: pointer;
+  margin: 0;
+}
+
+.shape-list__reverse {
+  flex: 0 0 auto;
+  width: var(--mid); height: var(--mid);
+  border: none;
+  background: none;
+  font-size: 20px;
+  color: var(--ink-faded);
+  cursor: pointer;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  line-height: 1;
+}
+.shape-list__reverse:hover { color: #1565c0; background: rgba(0,0,0,0.05); }
+
+/* === Country Manager (admin) === */
+#country-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+#country-table td {
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+#country-form-row input[type="text"],
+#country-form-row input[type="number"] {
+  padding: 6px 8px;
+  border: 1px solid var(--border-warm);
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+#country-form-row label {
+  font-size: 11px;
+  color: var(--ink-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* === Street View Carousel === */
+.sv-carousel {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.sv-carousel__viewport {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sv-carousel__arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: var(--mid); height: var(--mid);
+  border: none;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 28px;
+  line-height: 1;
+  cursor: pointer;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, opacity 0.2s;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  opacity: 0;
+}
+.sv-carousel__arrow--left  { left: 4px; }
+.sv-carousel__arrow--right { right: 4px; }
+.sv-carousel:hover .sv-carousel__arrow,
+.sv-carousel__arrow:focus-visible { opacity: 1; }
+.sv-carousel__arrow:hover { background: rgba(0, 0, 0, 0.6); }
+.sv-carousel__arrow--disabled {
+  opacity: 0.2 !important;
+  cursor: default;
+  pointer-events: none;
+}
+
+/* Always show arrows on touch devices */
+
+/* Counter */
+.sv-counter {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+/* Dots */
+.sv-dots {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  gap: 2px;
+}
+.sv-dots__dot {
+  width: var(--mid); height: var(--mid);
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: background 0.2s;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sv-dots__dot::after {
+  content: '';
+  width: 10px; height: 10px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-radius: 50%;
+  background: transparent;
+  transition: background 0.2s;
+}
+.sv-dots__dot.is-active::after {
+  background: #fff;
+  border-color: #fff;
+}
+
+/* Placeholder */
+.sv-placeholder {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  display: flex;
+}
+/* explicit — override [hidden] so JS placeholder.hidden=true actually hides it */
+.sv-carousel__arrow[hidden],
+.sv-dots[hidden],
+.sv-placeholder[hidden] { display: none; }
+.sv-placeholder:not([hidden]) {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--paper-warm);
+  gap: 8px;
+}
+.sv-placeholder__icon { font-size: 28px; }
+.sv-placeholder__text {
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-faded);
+  text-align: center;
+  margin: 0;
+  line-height: 1.4;
+}
+.sv-placeholder__link {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+.sv-placeholder__link:hover { text-decoration: underline; }
+
+/* Prevent key-catcher from being covered */
+.sv-carousel__arrow,
+.sv-dots__dot { pointer-events: auto; }
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--soil-fill);
+  color: #fff;
+  padding: 10px 24px;
+  border-radius: 8px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  z-index: 9999;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+.toast--visible { opacity: 1; pointer-events: auto; }
+.toast__link { color: #fff; font-weight: 600; text-decoration: underline; margin-left: 8px; }
+.toast__link:hover { color: rgba(255,255,255,0.8); }
+.toast--action {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 18px;
+  max-width: min(90vw, 600px);
+}
+.toast-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  margin-left: auto;
+}
+.toast-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.toast-btn:hover {
+  background: rgba(255, 255, 255, 0.32);
+  border-color: #fff;
+}
+.toast-btn--primary {
+  background: #fff;
+  color: var(--soil-fill);
+  border-color: #fff;
+}
+.toast-btn--primary:hover {
+  background: #f0f0f0;
+}
+
+/* Custom confirm dialog — Cancel is the emphasised / safer default */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+.confirm-overlay[hidden] { display: none; }
+.confirm-dialog {
+  background: var(--paper-card);
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 8px 32px rgba(44,36,22,0.2);
+  text-align: center;
+}
+.confirm-dialog p {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ink-charcoal);
+}
+.confirm-dialog__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+.confirm-dialog__actions .modal-btn {
+  min-width: 80px;
+}
+
+/* ===== Modal & Dialog Action Buttons (My Submissions style) ===== */
+.modal-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  min-height: var(--mid);
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.modal-btn:focus-visible {
+  outline: 2px solid var(--soil-mid);
+  outline-offset: 2px;
+}
+.modal-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.modal-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--ink-faded);
+}
+.modal-btn--ghost:hover,
+.modal-btn--ghost:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+.modal-btn--primary {
+  background: var(--soil-fill);
+  border-color: transparent;
+  color: #fff;
+}
+.modal-btn--primary:hover,
+.modal-btn--primary:focus-visible {
+  background: #1e4a2d;
+  color: #fff;
+}
+.btn-draft--restore {
+  background: #ff9800;
+  color: #fff;
+  border-color: transparent;
+  padding: 6px 14px;
+  min-height: var(--compact);
+  margin-right: 8px;
+}
+.btn-draft--restore:hover,
+.btn-draft--restore:focus-visible {
+  background: #f57c00;
+  color: #fff;
+}
+
+/* ===== Ghost Icon Button (unified with /my-submissions & modal icon style) ===== */
+.ghost-icon-btn {
+  width: var(--compact);
+  height: var(--compact);
+  min-width: var(--compact);
+  min-height: var(--compact);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  color: var(--ink-faded);
+  text-decoration: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.ghost-icon-btn svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+.ghost-icon-btn:hover,
+.ghost-icon-btn:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+.ghost-icon-btn:focus-visible {
+  outline: 2px solid var(--soil-mid);
+  outline-offset: 2px;
+}
+.ghost-icon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ghost-icon-btn--danger:hover,
+.ghost-icon-btn--danger:focus-visible {
+  background: var(--red-fill);
+  color: #fff;
+}
+
+/* ================================================================
+   Proposal — + card, modal, admin table
+   ================================================================ */
+
+/* --- + card --- */
+.country-card--add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: 2px dashed var(--border-warm);
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--ink-faded);
+  transition: border-color 0.2s, color 0.2s, background 0.2s;
+  /* 内边距**跟着基准卡走**（这里曾经写死 12px 10px，并另钉 min-height: 160px）。
+     ⚠️ 这张卡是网格的最后一张、且通常独占最后一行 —— 那一行的高度由它一个人说了算。
+     钉死的 160px 在基准卡 155px 高时看不出来，卡片收到 ~102px 之后就会让最后一行突兀地
+     高出 58px。反过来，内边距比基准小的话，最后一行又会**矮**一截（实测 95 vs 102）。
+     所以这里既不留 min-height、也不覆盖 padding，让它自己跟基准卡同档。 */
+  border-radius: 12px;
+}
+.country-card--add:hover {
+  border-color: var(--soil-mid);
+  color: var(--soil-mid);
+  background: rgba(74,124,89,0.04);
+}
+.country-card__plus {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 300;
+}
+
+/* --- Proposal modal --- */
+.proposal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(4px);
+  /* 1300 而非原来的 1000：遮罩必须盖住导航栏，而导航栏现在是 1200。它以前靠「同为 1000、
+     在 DOM 里更靠后」赢下这个平局 —— 那是个隐式依赖，抬导航栏时会静默反转（实测：导航栏浮在
+     遮罩上面不变暗）。写成显式的 1300 后，两者是明确的大小关系。 */
+  z-index: 1300;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.proposal-backdrop.is-open { opacity: 1; }
+
+.proposal-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -48%) scale(0.96);
+  background: var(--surface-plain);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.28);
+  z-index: 1301; /* 跟着 .proposal-backdrop 一起抬，保持在它上面一格 */
+  width: 90%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  padding: 0;
+}
+.proposal-modal.is-open {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.proposal-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px 0;
+}
+.proposal-modal__header h3 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  color: var(--ink);
+}
+.proposal-modal__close {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: var(--ink-warm);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
+  min-width: var(--mid);
+  min-height: var(--mid);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.proposal-modal__close:hover { color: var(--ink); }
+
+.proposal-modal__body {
+  padding: 16px 24px 24px;
+}
+
+.proposal-section {
+  margin-bottom: 14px;
+}
+.proposal-section label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.proposal-hint {
+  font-size: 12px;
+  color: var(--ink-warm);
+  margin: 0 0 6px 0;
+}
+.proposal-section select,
+.proposal-section input,
+.proposal-section textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #b8af9a;
+  border-radius: 6px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  background: var(--surface-plain);
+  color: var(--ink);
+  box-sizing: border-box;
+}
+.proposal-section textarea {
+  resize: vertical;
+  min-height: 48px;
+}
+
+.proposal-meta-toggle {
+  display: flex;
+  gap: 8px;
+}
+.meta-toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 12px;
+  border: 1px solid #b8af9a;
+  border-radius: 6px;
+  background: var(--surface-plain);
+  color: var(--ink-charcoal);
+  font-family: var(--font-body);
+  font-size: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.meta-toggle-btn:hover {
+  border-color: var(--soil-mid);
+}
+.meta-toggle-btn.is-selected {
+  border-color: var(--soil-mid);
+  background: #e3f0e6;
+  color: var(--soil-dark);
+  font-weight: 600;
+}
+
+.proposal-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--ink-warm);
+  font-size: 13px;
+}
+.proposal-divider::before,
+.proposal-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-warm);
+}
+
+.proposal-modal__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+/* Country + proposals table headers (admin) */
+#country-table th,
+#country-proposals-table th {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-faded);
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .proposal-modal {
+    width: 94%;
+    max-width: none;
+    border-radius: 12px 12px 0 0;
+    top: auto;
+    bottom: 0;
+    transform: translate(-50%, 100%);
+    max-height: 85vh;
+  }
+  .proposal-modal.is-open {
+    transform: translate(-50%, 0);
+  }
+}
+
+/* ============================================
+   Translation Toggle Slider
+   ============================================ */
+
+.lang-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  vertical-align: middle;
+}
+
+.lang-toggle--name {
+  /* Title-level sizing */
+}
+.lang-toggle--desc {
+  float: right;
+  margin-left: 0;
+}
+.lang-toggle--note {
+  display: flex;
+  margin: 0 0 6px;
+}
+
+/* short description 的翻译按钮紧跟其后 */
+.modal__toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.modal__toggle-row .lang-toggle {
+  margin-left: 0;
+}
+
+/* detailed description 的翻译按钮在展开区内，折叠时隐藏 */
+.modal__detailed > .lang-toggle--detail {
+  margin: 6px 0 4px;
+}
+
+.lang-toggle__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-subtle);
+  user-select: none;
+  line-height: 1;
+}
+
+.lang-toggle__track {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 20px;
+  background: var(--paper-warm);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  outline: none;
+  flex-shrink: 0;
+}
+.lang-toggle__track:focus-visible {
+  box-shadow: 0 0 0 2px var(--soil-mid);
+}
+
+/* States — colored track ends */
+.lang-toggle__track--zh {
+  background: #d4e5f7; /* blue tint for zh side */
+}
+.lang-toggle__track--en {
+  background: #d4e5f7;
+}
+
+.lang-toggle__thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  transition: left 0.2s ease;
+  pointer-events: none;
+}
+
+/* Thumb positions */
+.lang-toggle__track--zh .lang-toggle__thumb {
+  left: 2px;
+}
+.lang-toggle__track .lang-toggle__thumb {
+  /* center = default; when neither --zh nor --en, stays centered */
+}
+.lang-toggle__track:not(.lang-toggle__track--zh):not(.lang-toggle__track--en) .lang-toggle__thumb {
+  left: 12px;
+}
+.lang-toggle__track--en .lang-toggle__thumb {
+  left: 22px;
+}
+
+/* Loading spinner on thumb */
+.lang-toggle__track--loading {
+  cursor: wait;
+}
+.lang-toggle__track--loading .lang-toggle__thumb {
+  animation: translate-pulse 0.8s ease-in-out infinite;
+}
+.lang-toggle__track--loading .lang-toggle__thumb::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border: 2px solid var(--ink-subtle);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: translate-spin 0.6s linear infinite;
+}
+
+@keyframes translate-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(0.85); }
+}
+@keyframes translate-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ============================================
+   Translation Error Toast
+   ============================================ */
+
+.translate-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink-fill);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+  z-index: 10000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  max-width: 90vw;
+  white-space: normal;
+}
+.translate-toast.is-visible {
+  opacity: 1;
+}
+
+/* My Submissions — map view */
+#my-map { height: 60vh; width: 100%; border-radius: 8px; overflow: hidden; border: 1px solid var(--border-warm); margin-top: 20px; }
+
+/* 放大态：地图右上角的 ⤢ 按钮切换。选择器带一个类，优先级高过下面
+   @media (max-width: 600px) 里的 `#my-map { height: 50vh }` 和顶层的 60vh，
+   所以一条规则就够，不需要在断点里再补。故意不加 height 过渡：过渡期间
+   invalidateSize() 会读到中间值，Leaflet 的瓦片就按错的尺寸铺。 */
+#my-map-wrap.is-large #my-map { height: 90vh; }
+
+.leaflet-tooltip.my-map-tooltip {
+  pointer-events: auto !important; /* overrides style.css:653 `.leaflet-tooltip { pointer-events: none !important; }` */
+  padding: 0;
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  min-width: 170px;
+}
+.my-map-tooltip__inner { padding: 8px 10px; }
+.my-map-tooltip__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.my-map-tooltip__head strong { font-size: 13px; color: var(--ink-charcoal); }
+.my-map-tooltip__more {
+  border: none; background: transparent; cursor: pointer;
+  font-size: 18px; line-height: 1; padding: 6px 8px; margin: -6px -8px;
+  color: var(--ink-faded); border-radius: 6px; min-width: var(--compact); min-height: var(--compact);
+}
+.my-map-tooltip__more:hover { color: var(--ink-charcoal); background: var(--paper-card); }
+.my-map-tooltip__meta { font-size: 11px; color: var(--ink-faded); margin-top: 2px; }
+.my-map-tooltip__menu { margin-top: 6px; border-top: 1px solid var(--border-light); padding-top: 4px; }
+.my-map-tooltip__menu[hidden] { display: none; }
+.my-map-tooltip__menuitem {
+  display: block; width: 100%; text-align: left; padding: 5px 8px;
+  background: none; border: none; cursor: pointer; font-size: 12px; color: var(--ink-charcoal);
+  border-radius: var(--radius-sm);
+}
+.my-map-tooltip__menuitem:hover {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+  box-shadow: inset 2px 0 0 var(--soil-mid);
+}
+
+@media (max-width: 600px) {
+  #my-map { height: 50vh; }
+}
+/* 底图切换（右上角 OSM | Google segmented control） */
+.basemap-switch {
+  display: flex;
+  background: var(--paper-light, #fff);
+  border: 1px solid var(--border-warm, #e2d8c8);
+  border-radius: var(--radius, 8px);
+  overflow: hidden;
+  box-shadow: var(--shadow-md, 0 2px 8px rgba(0,0,0,0.12));
+}
+.basemap-switch__btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ink-charcoal, #333);
+  font-size: 12px;
+  font-family: var(--font-body, inherit);
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: var(--compact);
+  transition: background 0.15s, color 0.15s;
+}
+.basemap-switch__btn + .basemap-switch__btn {
+  border-left: 1px solid var(--border-warm, #e2d8c8);
+}
+.basemap-switch__btn.is-active {
+  background: var(--soil-dark, #4a7c59);
+  color: #fff;
+}
+.basemap-switch__btn:not(.is-active):hover {
+  background: rgba(74, 124, 89, 0.06);
+}
+
+/* 底图加载失败提示 */
+.basemap-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--red-fill);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  box-shadow: var(--shadow-md, 0 2px 8px rgba(0,0,0,0.2));
+  z-index: 5000;
+}
+
+/* ===== Explore modal header: borderless close, big flush star =====
+ * Overrides live at file end so they win over `.icon-btn` (defined later in the
+ * sheet than the original `.modal__close`) and the mobile media blocks. */
+.modal__close {
+  border: none;
+  background: none;
+}
+.modal__close:hover {
+  background: none;
+  border-color: transparent;
+}
+
+/* Let the title block absorb free space so the trailing controls hug the right;
+ * keep the star flush against the close X (no margin between them). */
+.modal__header > div:first-child { flex: 1; min-width: 0; }
+.modal__header .icon-btn { margin-left: 6px; }
+
+.modal__fav-btn {
+  margin-left: 6px;
+  margin-right: 0;
+  min-width: auto;
+  min-height: auto;
+  width: auto;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 34px;
+  line-height: 1;
+  color: var(--ink-faded);
+}
+.modal__fav-btn:hover {
+  background: none;
+  color: var(--ink-charcoal);
+}
+.modal__fav-btn[aria-pressed="true"] { color: #d9a100; }
+
+/* Drop the two divider lines between the description text and the reactions
+ * row: the dotted line above .modal__source and the solid line above
+ * .modal__reactions. */
+.modal__source { border-top: none; padding-top: 8px; }
+.modal__source:empty { display: none; }
+.modal__reactions { border-top: none; margin-top: 4px; }
+
+/* 徽章行夹在 `#modal-source` 与 reactions 之间（顺序由 modal.js 决定）。
+   它本身没有别的样式，只有间距 —— 徽章外观全由 .source-badge 负责。 */
+.modal__source-badge { margin: 12px 0 8px; }
+
+/* ===== Profile page redesign: wider grid, shorter stack, mobile-aware =====
+ * Only profile.html uses .profile-page / .profile-card, so this reshape is safe.
+ * When revealed, #profile-content must be display:grid (set inline in profile.html). */
+.profile-page {
+  max-width: 1080px;
+  padding: 28px 20px 56px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.profile-card {
+  margin-bottom: 0;
+  width: 100%;
+  box-sizing: border-box;
+  align-items: stretch;
+  text-align: left;
+}
+
+/* Identity card reads as a full-width header on top */
+.profile-card--hero {
+  grid-column: 1 / -1;
+  align-items: center;
+  text-align: center;
+}
+
+/* Submissions card holds stats + contribution rank + the my-submissions link,
+ * so it spans the full row (nothing else shares it). */
+.profile-card--submissions {
+  grid-column: 1 / -1;
+}
+
+/* Notes + Favorites bodies must fill their card — root fix for the cramped rows.
+ * Both are full-width rows: favorites above, country notes as the bottom strip. */
+#notes-card,
+#favorites-card {
+  grid-column: 1 / -1;
+  align-items: stretch;
+  text-align: left;
+}
+#notes-list {
+  width: 100%;
+}
+#favorites-list {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+/* .review-item defaults to 50% width (my-submissions tile layout); inside the
+ * favorites grid each card just fills its own cell (two-up on wide rows). */
+#favorites-list .review-item {
+  width: auto;
+  flex-shrink: 1;
+  box-sizing: border-box;
+  margin-bottom: 0;
+}
+#favorites-list .review-item__name a {
+  color: var(--soil-dark);
+  text-decoration: none;
+}
+#favorites-list .review-item__name a:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .profile-page {
+    grid-template-columns: 1fr;
+    padding: 20px 16px 40px;
+  }
+}
+/* Narrow phones: single favorite per row; stack each card's info + actions so buttons never crowd text */
+@media (max-width: 620px) {
+  #favorites-list { grid-template-columns: 1fr; }
+}
+
+/* ===== Profile v3: GitHub-style header, narrower page =====
+ * Header card = big avatar on the left, identity + submissions + rank compact
+ * on the right. Page narrows back to a single column (900px). */
+.profile-page {
+  max-width: 900px;
+  display: block;
+  padding: 28px 20px 56px;
+}
+.profile-page .profile-card {
+  margin-bottom: 16px;
+}
+.profile-page .profile-card:last-child {
+  margin-bottom: 0;
+}
+
+.profile-card--hero {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 28px;
+  text-align: left;
+  padding: 28px;
+}
+.profile-card--hero .profile-card__avatar {
+  width: 150px;
+  height: 150px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+.profile-card__main {
+  flex: 1;
+  min-width: 0;
+}
+.profile-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.profile-card__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.profile-card__actions .profile-action-btn {
+  min-height: var(--compact);
+  padding: 4px 12px;
+  font-size: 13px;
+  border-radius: var(--radius);
+}
+.profile-card__actions .ghost-icon-btn {
+  width: var(--compact);
+  height: var(--compact);
+  padding: 0;
+}
+
+/* compact stats + rank inside the header */
+.profile-card--hero .profile-stats {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+}
+.profile-card--hero .profile-stat__value { font-size: 22px; }
+.profile-card--hero .profile-stat__label { font-size: 10px; letter-spacing: 0.4px; }
+
+@media (max-width: 720px) {
+  .profile-card--hero {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 22px 18px;
+  }
+  .profile-card--hero .profile-card__avatar { width: 120px; height: 120px; }
+  .profile-card__head { justify-content: center; }
+  .profile-card__head > div:first-child { text-align: center; }
+  .profile-card--hero .profile-stats { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ===== Profile stats differentiation, bigger total, logout hover ===== */
+.profile-card--hero .profile-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+.profile-stat--total .profile-stat__value {
+  font-size: 36px;
+  color: var(--soil-dark);
+}
+.profile-stat--approved .profile-stat__value { color: #2e7d32; }
+.profile-stat--pending  .profile-stat__value { color: #b26a00; }
+.profile-stat--rejected .profile-stat__value { color: var(--feedback-red); }
+.profile-stat--hidden   .profile-stat__value { color: var(--ink-faded); }
+.profile-stat--trash    .profile-stat__value { color: var(--ink-subtle); }
+
+#profile-logout-btn {
+  color: var(--feedback-red);
+  border: 0;
+  background: transparent;
+}
+#profile-logout-btn:hover,
+#profile-logout-btn:focus-visible {
+  background: var(--red-fill);
+  color: #fff;
+}
+
+/* ===== Favorites action buttons: smaller, softer View, stronger hover =====
+ * Scoped to the favorites tiles so review/my-submissions buttons are untouched. */
+#favorites-list .review-btn--approve,
+#favorites-list .review-btn--reject,
+#favorites-list .review-btn--share {
+  min-height: var(--compact);
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 6px;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+#favorites-list .review-btn--approve {
+  background: transparent;              /* colour only on hover */
+  color: var(--soil-dark);
+  border: 0;
+}
+#favorites-list .review-btn--approve:hover,
+#favorites-list .review-btn--approve:focus-visible {
+  background: var(--soil-fill);
+  color: #fff;
+}
+#favorites-list .review-btn--share {
+  background: transparent;              /* colour only on hover */
+  color: var(--soil-dark);
+  border: 0;
+  cursor: pointer;
+}
+#favorites-list .review-btn--share:hover,
+#favorites-list .review-btn--share:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+#favorites-list .review-btn--reject {
+  background: transparent;              /* colour only on hover */
+  color: var(--feedback-red);
+  border: 0;
+}
+#favorites-list .review-btn--reject:hover,
+#favorites-list .review-btn--reject:focus-visible {
+  background: var(--red-fill);
+  color: #fff;
+}
+#favorites-list .ghost-icon-btn {
+  width: var(--compact);
+  height: var(--compact);
+  min-width: var(--compact);
+  min-height: var(--compact);
+  padding: 0;
+}
+
+/* ===== My Submissions 卡片（2026-10-01 改版）=====
+ * 三个 tab（active / hidden / trash）共用同一套行结构，差别只在哪几行出现：
+ *   右上角状态三角 / 标题（单行省略）/ 国旗 + 标签（放不下就丢）/ 正文（两行）
+ *   / 详情标记 + 计数 / 拒绝理由 / 来源徽章 / 图标动作行
+ *
+ * 全部规则都带 #my-submissions-content 前缀 —— .review-item 是 review.html **共用**
+ * 的类（那边 .review-item__actions / __name / __desc 都在用），全局改会波及审核页。 */
+
+/* 同排等高：卡片吃满所在 flex 行的高度，低的那张补出来的空白靠 __actions 的
+   margin-top:auto 全部压到动作行**上面**，于是每张卡的图标行落在同一条水平线上。
+   ⚠️ 写成卡片的 align-self，而不是容器的 align-items：#my-results 里除了卡片还有
+   .trash-bar（Trash tab 的 Restore-all 那一行，见 renderFromCache），容器级会把它一起拉高。
+   为什么不用 JS 量最高值回写 min-height：那要处理 resize、分页后新插入的卡、字体加载完成后
+   再跑一次；而 stretch 是 flex 行本来就有的语义，零 timing 问题。 */
+#my-submissions-content #my-results .review-item { align-self: stretch; }
+/* position: relative 只加在 my-submissions 页 —— .review-item 是 review.html 共用的类，
+   全局加会改变那边绝对定位子元素的参照物。
+   overflow: hidden 是右上角三角能贴着圆角被裁掉的前提（不裁的话它的两个直角会戳出卡片圆角）。
+   代价：子元素的焦点环也会被裁。图标按钮 32px 见方，四周离卡片边框盒至少 11px
+   （10px padding + 1px border），焦点环 2px + offset 2px 最多外扩 4px，够不着 —— 已实测 Tab 走过。 */
+#my-submissions-content .review-item {
+  position: relative;
+  overflow: hidden;
+  align-items: stretch;
+}
+#my-submissions-content .review-item__info {
+  /* 基础规则的 flex:1 / min-width:0 保持不动（≤767px 断点靠它继续成立），
+     这里只补列向排布，让动作行能沉底。 */
+  display: flex;
+  flex-direction: column;
+}
+
+/* 右上角状态三角：贴角、底色 = 该条的状态色（由卡片上的 --status 供，色值唯一来源是
+   my-submissions.html 的 STATUS_FILL）、斜边朝内。
+   不用经典的 border 三角：透明的那条边仍然占盒子，而且颜色只能写死在 border-* 上，
+   接不上自定义属性。clip-path 版本盒子就是实打实的 26x26，颜色一条 background 搞定。 */
+#my-submissions-content .review-item__status {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 26px;
+  height: 26px;
+  clip-path: polygon(0 0, 100% 0, 100% 100%);
+  background: var(--status, #f4d35e);
+}
+
+/* 第一行：标题单行省略。右边留出三角的宽度再加一点呼吸，省略号不会钻到三角底下。 */
+#my-submissions-content .review-item__name {
+  padding-right: calc(26px + 6px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 标题里的真链接，只有 approved 的卡有（其余仍是纯文本 div，见 buildNameLine）。
+   <a> 保持 inline 且不加任何尺寸 —— 截断仍由外层 div 的 text-overflow 负责，
+   行高取继承值，所以 R7「省略行为不变」天然成立。
+   颜色沿用标题色；下划线只在 hover / focus-visible 出现 —— 后者同时充当一条
+   不会被 overflow:hidden 裁掉的焦点提示（UA 的 outline 在裁切容器里可能只剩一半）。 */
+#my-submissions-content .review-item__name-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+#my-submissions-content .review-item__name-link:hover,
+#my-submissions-content .review-item__name-link:focus-visible {
+  text-decoration: underline;
+}
+
+/* 第二行：国旗（无旗则退回国家名文字）+ 标签 + 右端通知 chip */
+#my-submissions-content .review-item__line2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+  min-width: 0;
+}
+#my-submissions-content .review-item__flag,
+#favorites-list .review-item__flag {
+  width: 18px;
+  height: 12px;
+  object-fit: cover;
+  border-radius: 2px;
+  flex: 0 0 auto;            /* 与 .country-tab__flag 同规格 */
+}
+#my-submissions-content .review-item__country {
+  font-size: 12px;
+  color: var(--ink-faded);
+  flex: 0 0 auto;
+}
+#my-submissions-content .review-item__tags {
+  display: flex;
+  /* ⚠️ 必须显式写 nowrap：基础规则是 flex-wrap:wrap，不覆盖的话放不下的标签
+     会换到第二行（卡片长高），而不是被丢掉 —— 「放不下就丢」是这一行的契约。 */
+  flex-wrap: nowrap;
+  gap: 4px;
+  flex: 1 1 auto;            /* 只有它吃剩余空间 —— 丢标签先丢它，通知 chip 不动 */
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: hidden;          /* 只兜住一帧的闪烁；「放不下就丢」靠 JS 量测，见 trimTagRow */
+}
+#my-submissions-content .review-item__tag {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+/* 通知 chip（New / Edited by admin / Has pending edit / Hidden）：
+   flex:0 0 auto —— 标签容器先被压缩，不会被它们挤掉。 */
+#my-submissions-content .review-item__line2 .review-item__new-tag,
+#my-submissions-content .review-item__line2 .review-item__chip {
+  flex: 0 0 auto;
+  margin-left: 0;
+  vertical-align: baseline;
+}
+/* 第二行的小胶囊。**不是 .status-badge** —— prd AC3 要求卡片里不再有那个类
+   （旧的状态胶囊下台了），这两个是另一回事：抄的是同一组配色，
+   「浅底深字」的块不跟主题翻（见 theme-system.md 的「哪些不翻」）。 */
+#my-submissions-content .review-item__chip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex: 0 0 auto;
+}
+#my-submissions-content .review-item__chip--pending { background: #FFF3CD; color: #856404; }
+#my-submissions-content .review-item__chip--hidden  { background: #F8D7DA; color: #721C24; }
+
+/* 第四行：左端「有 detailed description」标记、右端 Useful / Not 计数 */
+#my-submissions-content .review-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+#my-submissions-content .review-item__detail {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+#my-submissions-content .review-item__detail svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+#my-submissions-content .review-item__counts {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+/* 投稿人卡片上的「图标 + 计数」徽章行（utils.js 的 buildReactionCounts 产出）。
+   两个消费者共用：my-submissions 的卡片第四行右端、profile 的收藏卡。
+   图标 13px 与同排的 detail 标记（.review-item__detail svg）等高；数字用等宽数字，
+   计数变化时行宽不抖。 */
+.reaction-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.reaction-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.reaction-count img {
+  width: 13px;
+  height: 13px;
+  display: block;
+  flex: 0 0 auto;
+}
+.reaction-count__n {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 拒绝理由（仅 rejected 且有理由时存在）。要留 margin-bottom：动作行走
+   margin-top:auto，没有多余空间时它解析成 0，那 8px 的间距就得由上一行的下边距来给。 */
+#my-submissions-content .review-item__reason {
+  color: var(--feedback-red);
+  font-style: italic;
+  font-size: 12px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+
+/* ===== 动作行的图标键（active 四个 / hidden·trash 各两个）=====
+ * 32px 命中区走 --compact 档（桌面 32px、粗指针 44px，见
+ * .trellis/spec/frontend/touch-targets.md 的分档表），18px 字形，无底无框，
+ * 颜色只在 hover 时出现 —— 与放大镜、旧的下载图标同一族。
+ * **不要自己发明伪元素命中区**：那个文件把「命中区解耦」明确列为暂缓项。 */
+#my-submissions-content .review-item__actions {
+  gap: 2px;
+  flex-wrap: nowrap;
+  margin-top: auto;          /* 等高补出来的空白全部落在这一行上面 */
+}
+#my-submissions-content .review-item__icon {
+  width: var(--compact);
+  height: var(--compact);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+  /* 图标是「图形对象」，WCAG 1.4.11 要求 3:1 而非文字的 4.5:1。
+     --ink-faded 压在 --paper-light 上约 4.4:1，够用且不抢戏。 */
+  color: var(--ink-faded);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#my-submissions-content .review-item__icon svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+#my-submissions-content .review-item__icon:hover,
+#my-submissions-content .review-item__icon:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+#my-submissions-content .review-item__icon--hide:hover,
+#my-submissions-content .review-item__icon--hide:focus-visible {
+  background: #2563eb;
+  color: #fff;
+}
+#my-submissions-content .review-item__icon--delete:hover,
+#my-submissions-content .review-item__icon--delete:focus-visible {
+  background: var(--red-fill);
+  color: #fff;
+}
+/* 最后一个按钮顶到右下角（2026-10-01 用户要求把下载放右下角；hidden / trash
+   的两个键也顺带是一左一右）。当有 share 时，share 顶到右侧且 download 紧随其后。 */
+#my-submissions-content .review-item__icon:last-child { margin-left: auto; }
+#my-submissions-content .review-item__icon--share { margin-left: auto; }
+#my-submissions-content .review-item__icon--share + .review-item__icon { margin-left: 0; }
+
+/* ===== 下载选项菜单（Full JSON / GeoJSON only）=====
+ * **必须 fixed + 挂在 body 上**：卡片是 overflow: hidden（右上角三角贴圆角的前提），
+ * 浮层放卡片里会被裁掉。top/left 由 my-submissions.html 的 positionDownloadMenu
+ * 按触发按钮的 rect 算，这里只管长相。
+ *
+ * z-index 4000：与 `.nav__dropdown` 同一个「页面级浮层」档。菜单挂在 body 上、
+ * 不在 `.nav` 那个 sticky 层叠上下文里，所以压得过导航栏的 1200（见 .nav 那条注释里
+ * 的刻度：地图控件 1000 < 地图浮层 1001 < 导航栏 1200 < 弹窗 1300/1301）。
+ * 弹窗（5000）在它之上 —— 但下载图标只在列表页出现，两者不会同时在场。 */
+.download-menu {
+  position: fixed;
+  z-index: 4000;
+  min-width: 160px;
+  padding: 6px 0;
+  background: var(--paper-light, #faf8f3);
+  border: 1px solid var(--border-warm, #e0d8cc);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+/* [hidden] 得显式压回 display:none —— 上面的 class 规则若给了 display（现在是默认的
+ * block，暂时不冲突），浏览器 UA 的 [hidden]{display:none} 会被作者样式盖掉。写在这里
+ * 是给将来加 display 的人兜底，也是 `.my-map-tooltip__menu[hidden]` 的既有做法。 */
+.download-menu[hidden] { display: none; }
+.download-menu__item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--ink-charcoal);
+  cursor: pointer;
+  /* 32px 命中区走 --compact 档，与动作行图标同一个分档（touch-targets.md）。 */
+  min-height: var(--compact);
+}
+.download-menu__item:hover,
+.download-menu__item:focus-visible {
+  background: var(--paper-warm);
+  color: var(--soil-dark);
+}
+/* 焦点环照全局那条 `button:focus-visible` 走（2px --soil-mid），**不要 outline: none** ——
+ * 8-23 那个任务刚把全站的黑色焦点环收拾干净，这里再抹一次等于开倒车。
+ * 只把 offset 收成负的：条目是满宽的，菜单横向 padding 是 0，正 offset 的环会画到
+ * 菜单边框外面去，看着像一个比菜单还宽的框。 */
+.download-menu__item:focus-visible { outline-offset: -2px; }
+
+/* ===== Favorites tile: compact layout =====
+ * Header (title left, flag + actions right), optional desc, footer (tags/reactions left, saved date right) */
+#favorites-list .review-item {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  gap: 6px;
+  align-items: stretch;
+}
+#favorites-list .fav-item__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+}
+#favorites-list .fav-item__title {
+  margin-bottom: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+}
+#favorites-list .review-item__actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin-top: 0;
+  flex: 0 0 auto;
+}
+#favorites-list .fav-item__footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+#favorites-list .fav-item__saved-date {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--ink-faded);
+  white-space: nowrap;
+}
+
+/* "View My Submissions" hero link — underline appears on hover */
+.profile-card a[href="/my-submissions"] {
+  text-decoration: none;
+}
+.profile-card a[href="/my-submissions"]:hover {
+  text-decoration: underline;
+}
+
+/* ===== Admin Review action buttons: same borderless, colour-only-on-hover =====
+ * Applies to every review action button inside the review page — submission row
+ * actions, the country manager (edit/delete/proposals/reload/save), tag manager
+ * delete, users ban, notes approve/delete, street view — while the floating
+ * batch bar, tabs and dialogs keep their own look (none of them sits inside
+ * these scopes). */
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--approve,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--reject,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--exists,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--delete,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--undo,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--streetview {
+  border: 0;
+  min-height: var(--compact);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--approve {
+  background: transparent;
+  color: var(--soil-dark);
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--approve:hover,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--approve:focus-visible {
+  background: var(--soil-fill);
+  color: #fff;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--reject,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--delete {
+  background: transparent;
+  color: var(--feedback-red);
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--reject:hover,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--reject:focus-visible,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--delete:hover,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--delete:focus-visible {
+  background: var(--red-fill);
+  color: #fff;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--exists {
+  background: transparent;
+  color: #2563eb;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--exists:hover,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--exists:focus-visible {
+  background: #2563eb;
+  color: #fff;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--undo {
+  background: transparent;
+  color: var(--ink-faded);
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--undo:hover,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--undo:focus-visible {
+  background: rgba(44, 36, 22, 0.08);
+  color: var(--ink-charcoal);
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--streetview {
+  background: transparent;
+  color: #3367D6;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--streetview:hover,
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--streetview:focus-visible {
+  background: #4285F4;
+  color: #fff;
+}
+#review-main :is(.review-item__actions, #country-manager, #user-list, #notes-panel, #tag-manager, #audit-log) .review-btn--streetview:disabled {
+  background: transparent;
+  color: var(--ink-subtle);
+  cursor: not-allowed;
+}
+
+/* ===== Admin Country Notes: two cards per row, actions on the header line ===== */
+#review-main #notes-panel #notes-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 640px) {
+  #review-main #notes-panel #notes-list { grid-template-columns: 1fr; }
+}
+
+/* ===== Street View carousel arrows: a centred pair along the bottom =====
+   Google's embed pins its control column to the RIGHT edge: zoom 24–105px above the bottom, compass
+   137–186px, the motion-tracking toggle above those — all ~10–58px in from the right. So the right
+   edge is occupied from the bottom up to ~186px and is unusable for a 44px control; the horizontal
+   centre of the pane is the only place along the bottom that is clear of all of it.
+   The pair therefore sits centred on the pane's midline, just above the dot indicators, which own the
+   very bottom strip (`.sv-dots`, bottom 28px, 44px tap targets → 28–72px from the bottom). The 8px
+   gap keeps the two apart. The bottom-left "Press F for fullscreen" chip (12–161px in from the left,
+   8–35px above the bottom) is cleared by the 80px bottom offset.
+   Geometry: 44px arrows + 8px gap = 96px total, so the pair spans 50%−48px … 50%+48px. Its right
+   edge only reaches Google's right-hand column if the pane is narrower than ~212px, which does not
+   occur; no per-display tuning and no dependence on where any individual control happens to sit. */
+.sv-carousel__arrow--left  { top: auto; bottom: 80px; left: calc(50% - 48px); right: auto; transform: none; }
+.sv-carousel__arrow--right { top: auto; bottom: 80px; left: calc(50% + 4px);  right: auto; transform: none; }
+
+/* ===== Submit page: roomier description fields =====
+   Both fell back to `.form-group textarea { min-height: 80px }` (style.css:1103) — too cramped for a
+   300-char short description and a 2000-char detailed one. 120px is roughly 4 lines each. */
+#region-desc,
+#region-detail-desc { min-height: 120px; }
+
+/* ===== Explore tag filter: one icon button + a column-balanced panel =====
+   Replaces the row of per-category `.tag-dropdown` buttons that used to wrap across the explore
+   toolbar. The pattern — a single icon button carrying a selected-count badge, opening a panel
+   with one column per category — is borrowed from the singer page in ../davidtao; the colours,
+   tokens and placement are this project's.
+
+   The button is no longer ghost-styled: it lives in the map's Leaflet control column now, so it
+   takes the shared "Map control buttons" look and is meant to be indistinguishable from the
+   zoom / reset / contributors buttons beside it.
+
+   Cascade: this block replaces, in place, the block that was moved here verbatim from
+   explore.html's inline <style>. That inline block sat after the <link rel="stylesheet"> and so
+   beat every rule in this file; keeping its replacement here preserves that "last in file"
+   position. `.tag-filter*` is a new class family with no competitors, so nothing else depends on
+   the placement.
+
+   ⚠️ The `.tag-dropdown__*` halves of the "Shared dropdown base" group (style.css:1727-1845) are
+   comma-joined with `.country-filter__*`, which my-submissions still uses. No page emits
+   `.tag-dropdown` any more, so those halves are dead — but they CANNOT be deleted without
+   splitting those selector groups, which is a separate, separately-verified change. Leave them. */
+/* ===== Explore map tools: search + tag filter floating over the map =====
+   These two used to be a full-width `.toolbar` row ABOVE the map — a real flex row, so it pushed
+   the map down instead of covering it. They are now two 44px buttons in the map's top-left
+   corner, stacked directly above Leaflet's own controls.
+
+   Not built as `L.Control`s on purpose. Leaflet APPENDS controls, so anything added after map
+   creation lands BELOW the zoom control, and getting above it would mean DOM surgery. Worse, the
+   tag filter is built by explore.html's inline IIFE at PARSE time, while the map is only created
+   later inside app.js's DOMContentLoaded — so a control-based version would need a map-ready hook
+   or would have to leak explore-only controls into the shared map.js. A plain absolutely
+   positioned overlay avoids both.
+
+   `--map-tools-h` is the ONE magic number here: it is both the column's height and what pushes
+   Leaflet's column down, so the two can never drift apart. If a third tool is ever added, this is
+   the single value to update — and the "tools do not overlap the zoom control" assertion will go
+   red if it is forgotten. */
+/* ⚠️ The variable lives on `.map-shell`, NOT on `.map-tools`. The rule that consumes it targets
+   `.leaflet-top.leaflet-left`, which is a SIBLING of `.map-tools` — and custom properties inherit
+   down the tree, so a `--map-tools-h` declared on the tools is simply invisible to the Leaflet
+   column. Declaring it here puts both the tools and the control column under one scope.
+   Getting this wrong is silent: the padding computes to nothing and the icons land on top of the
+   zoom buttons (which is exactly what the first run of this change did). */
+/* ⚠️ 从档位**推导**，不要再写死。原先这里是写死的 88px（旧注释注明「2 × 44px buttons」）——
+   2026-09-28 分档改造把所有控件从 44 降到 --mid 之后，这行如果不跟着走，工具列只占 72px
+   而缩放控件仍被推下 88+10px，中间空出 16px。**测试抓不到**：那圈断言查的是「重叠」，
+   静默的间隙不算重叠。
+   按钮高度来自 `.map-reset-btn` 那组的 `height: var(--mid)`，两个紧贴 → 列高 = 2 × --mid。
+   ⚠️ 写这段注释时不要在里面嵌注释结束符：注释会提前闭合，后面的中文就变成选择器的一部分，
+   这条规则直接失效（而且花括号仍然配平，没有任何报错）。 */
+.map-shell { --map-tools-h: calc(var(--mid) * 2); }
+.map-tools {
+  position: absolute;
+  top: 10px;                      /* = Leaflet's own .leaflet-control margin */
+  left: 10px;
+  z-index: 1001;                  /* over Leaflet's 1000, far under .nav's 1200 */
+  display: flex;
+  flex-direction: column;
+}
+.map-tools > * { width: var(--mid); }
+.map-shell .leaflet-top.leaflet-left { padding-top: calc(var(--map-tools-h) + 10px); }
+
+/* 放大镜与筛选在 HTML 里（parse 阶段就存在），而 zoom / reset / contributors 那四个要等
+   Leaflet 从 unpkg 下载完、initMap 装好控件才出现 —— 于是先冒出两个按钮浮在还没出来的地图上，
+   过一会儿另外四个才一起冒出来，六个控件分两次出现。压到 mapready 之后再放它们出来。
+   闸门由 map.js 在控件装齐后派发（app.js 的失败分支也派发，否则地图起不来时会永久藏住）。
+   用 visibility 而不是 opacity：这不只是观感问题 —— 地图还没就绪时按下去也没有意义，
+   藏就得连交互一起藏。 */
+.map-tools { visibility: hidden; }
+.map-tools.is-ready { visibility: visible; }
+
+/* ⚠️ 展开的筛选栏必然盖住落在它范围内的悬停卡片，而**这个层级差改不掉**：卡片在
+   `.leaflet-map-pane`（z-index:400 + transform，自建层叠上下文）里，抬 tooltip pane 抬不出那层，
+   抬 map pane 又会把瓦片一起抬到搜索框上面。所以卡片靠 map.js 的 clampHoverToMap 位移绕开，
+   不靠 z-index。别在这里加 `.leaflet-tooltip-pane { z-index: ... }` —— 实测无效。 */
+
+/* Google 底图激活时，把左下角的 Leaflet 控件列整体抬起，给 Google 的水印让位。
+   水印是 Google Maps SDK 自己画进地图容器的，其条款要求可见且不得移动 —— 能挪的只有比例尺
+   这一侧。手法与上面 --map-tools-h 完全一致：padding 抬**整列**而不是给
+   .leaflet-control-scale 单独加 margin，将来左下角再加控件也会一起让位、不会各自漂移。
+   数值构成：Google logo 高约 26px + 它自带的下边距，再留几像素间隙。**要调只改这一个数字。**
+
+   变量挂在 body 上、而不是某个地图容器上：它回答的是「这一页现在是不是 Google 底图」，
+   跟页面上有几个地图、容器叫什么名字都无关。
+   ⚠️ 挂 `.map-shell` 的时候，my-submissions 的 #my-map-wrap 完全够不着（没有这个祖先），
+   规则整条不匹配 —— 比例尺照样压在水印上，而且是静默的。消费端按容器逐个列即可，
+   将来再加地图也只动这一行，36px 仍然只有一处。 */
+.map-shell .leaflet-bottom.leaflet-left,
+#my-map-wrap .leaflet-bottom.leaflet-left { padding-bottom: var(--basemap-watermark-h, 0px); }
+body.basemap-google { --basemap-watermark-h: 36px; }
+
+/* ===== Explore 的国家范围入口（顶部正中的星标 / 空态）=====
+   与 .map-tools 同档（1001）：压过 Leaflet 的 1000，低于 .nav 的 1200 与 modal 的 1300/6000。
+   固定顶部正中 —— explore 一次只显示一个国家，屏幕上最多一个入口，任何 zoom/pan 下都可达；
+   这也是它不必是 Leaflet 图层的原因（见 explore.html 里那段说明）。 */
+.country-meta-entry {
+  position: absolute;
+  top: 10px;                       /* 与 .map-tools 的 top 对齐 */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: calc(100% - 240px);   /* 左右让开工具列与 basemap 切换 */
+  transition: top 0.15s ease;
+}
+/* 窄屏上搜索框展开时会盖住正中（它从 x≈60 向右伸 240px，见 .search-chip__field），
+   星标下移一行让位。类由 map.js 依据 #map-search-toggle 的 aria-expanded 同步。
+   56px 这个值必须高过搜索框的下沿（约 44px）——改搜索框尺寸时记得一起核。 */
+.country-meta-entry.is-shifted { top: 56px; }
+.country-meta-entry[hidden] { display: none; }
+
+/* 只有一颗星，没有圆框也没有底 —— 白底圆形按钮压在底图上像张贴纸，星号本身才是内容。
+   44×44 是触摸目标，保留；去掉底色后 hover 改用颜色表达，否则鼠标移上去毫无反馈。 */
+.country-meta-entry__btn {
+  width: var(--mid);
+  height: var(--mid);
+  min-height: var(--mid);
+  padding: 0;
+  border: none;
+  border-radius: 50%;          /* 只为了让 focus-visible 的环是圆的，不画任何底色 */
+  background: none;
+  color: var(--soil-dark);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+.country-meta-entry__btn:hover { color: var(--soil-mid, #6b9c78); }
+.country-meta-entry__btn[hidden] { display: none; }
+
+/* 空态刻意做得安静：多数国家都没有国家范围 meta，这块会出现在大多数国家页上，
+   做成醒目卡片会让 explore 显得很吵。小字、低对比、不抢视线。 */
+.country-meta-entry__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-warm, #e2d8c8);
+  border-radius: var(--radius, 8px);
+  background: var(--paper-light, #fff);
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--ink-faded, #7a7265);
+}
+.country-meta-entry__empty[hidden] { display: none; }
+.country-meta-entry__empty a {
+  color: var(--soil-dark);
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
+/* Search: a magnifier that expands into an input on click (the singer page's pattern). The field
+   is absolutely positioned so opening it never reflows the column underneath. */
+.map-search { position: relative; }
+/* ⚠️ Without this the SVG falls back to the browser default and renders at 40×40 inside a 44px
+   button — nearly touching the border, and twice the size of every other icon in the column.
+   Omitting the size is silent, so keep this rule next to the button. */
+.search-chip__toggle svg { width: 20px; height: 20px; display: block; }
+.search-chip__field {
+  position: absolute;
+  left: calc(100% + 6px);
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--mid);
+  padding: 0 4px 0 8px;
+  /* Deliberately chrome-free — no background, border, radius or shadow. The field floats over the
+     map and the map is meant to stay visible through it. Both basemaps are light (OSM / Google
+     roadmap), so the dark text stays readable; the one thing that can land behind it is a region
+     polygon's 52%-opacity fill, which costs some contrast.
+     The input keeps its :focus-visible-style outline below — "no chrome" is a resting state, not
+     a reason to leave keyboard users without a focus indicator. */
+}
+/* The repo has no global [hidden] rule, so a display:flex element must opt out itself. */
+.search-chip__field[hidden] { display: none; }
+.search-chip__input {
+  border: none;
+  background: transparent;
+  color: var(--ink-charcoal);
+  font-family: var(--font-body);
+  font-size: 14px;
+  width: 240px;
+  max-width: calc(100vw - 110px);   /* keep the chip inside the viewport on a phone */
+  padding: 4px 2px;
+  outline: none;
+}
+.search-chip__input::placeholder { color: var(--ink-subtle); }
+.search-chip__input:focus {
+  outline: 2px solid var(--soil-mid);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.search-chip__clear {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-faded);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.search-chip__clear:hover { background: rgba(var(--soil-rgb), 0.10); color: var(--soil-dark); }
+.search-chip__clear svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.search-chip__clear[hidden] { display: none; }
+
+/* The tags panel hangs off the filter button. `left: 0` is safe again now that the button sits at
+   the map's left edge (x=10) — the previous round had to anchor to `.toolbar` because the button
+   came after the search input and a 920px panel would have run off the right of a 1024px
+   viewport. The cap is viewport-relative, not a flat 920px, so narrow screens stay inside. */
+.tag-filter { position: relative; display: block; }
+
+/* Box, border, radius, size and hover all come from the shared "Map control buttons" group
+   further up — these two must be indistinguishable from their Leaflet neighbours. Only what is
+   specific to a TOGGLE lives here: the icon box and the active colour. */
+.tag-filter__toggle { position: relative; }
+.tag-filter__toggle svg { width: 20px; height: 20px; display: block; fill: currentColor; }
+/* 激活态同理走 --soil-fill：这个钮的底盘也是那行写死的 #fff，深色下 --soil-dark 会变成
+   #82c79a 浅绿，压在白底上只有 1.98:1（浅色是 7.95:1）。 */
+.tag-filter__toggle.is-active,
+.tag-filter__toggle[aria-expanded="true"] { color: var(--soil-fill); }
+
+.tag-filter__badge {
+  position: absolute;
+  /* Outside the box's top-right corner, like a notification badge — the button is now a bordered
+     white square, so an inset badge would collide with the border. */
+  top: -6px;
+  right: -6px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--soil-fill);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+.tag-filter__badge[hidden] { display: none; }
+/* 面板展开时角标让位 —— 面板本身就在展示选择 */
+.tag-filter__toggle[aria-expanded="true"] .tag-filter__badge { display: none; }
+
+/* No z-index here on purpose. The panel must paint over Leaflet's controls (1000/800), but it
+   cannot do that itself: `.map-tools` carries `z-index: 1001` and therefore establishes a
+   stacking context, so nothing inside it can escape upward. The lift comes from `.map-tools`.
+   Raising this value would look like it helps and would change nothing. See map-overlap-selection.md. */
+.tag-filter__panel {
+  /* Containing block is `.tag-filter` itself — 44px wide, sitting at the map's left edge. */
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  /* 100vw includes the scrollbar, so subtract enough to leave a real margin on both sides.
+     860px 而不是 920px:配合下面 `column-width: 112px` 才凑得出 6 栏。这两个数是**一对**,
+     单独改任一个都会退回「栏少而肥」。实测(1600×1000 视口) 860 + 112 → 6 栏 ×118px。 */
+  width: min(860px, calc(100vw - 24px));
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: 14px 16px;
+  background: var(--paper-light);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+  font-family: var(--font-body);
+  text-align: left;
+}
+.tag-filter__panel[hidden] { display: none; }
+
+/* Column balancing is the whole point of using multicol here rather than a grid: only multicol
+   distributes the categories evenly by content height. A `grid-auto-flow: row` grid would size
+   each row to its tallest cell, leaving dead space beside the small categories — and `grid` is
+   not even a candidate for the equal-width problem below, because grid row heights are SHARED
+   across columns, so "put a different number of categories in each column" cannot be expressed.
+   `column-width` only decides HOW MANY columns fit — the used width is always
+   `(available + gap) / n - gap`, IDENTICAL for every column. There is no per-column intrinsic
+   width in multicol: `width: fit-content` on the container collapses to 101px / 1 column, and
+   `repeat(auto-fill, max-content)` collapses the same way. Don't go looking for one.
+   ⚠️ 这两个数是**一对**(与 .tag-filter__panel 的 860px 共同决定结果):
+     860 + 112 → 6 栏 ×118px   死区 32px/栏  面板 860×392  ← 现在
+     920 + 140 → 5 栏 ×158px   死区 72px/栏  面板 920×486  ← 改之前
+   112 是贴着实测最长类别(Terrain 'mountainous',111.2px)取的**下限**:再小就会让长标签
+   在栏内断词。类别变长/变多时先量 max-content 再动这个值,别凭感觉调。 */
+.tag-filter__cols {
+  column-width: 112px;
+  column-gap: 24px;
+}
+
+/* The largest category here is Copyright (9 tags, ~290px). `break-inside: avoid` forces the
+   balancer to give it a whole column, so the panel's height floor is set by that block — and if
+   the panel still overflows, `max-height` + `overflow-y` above catches it. */
+.tag-filter__col {
+  break-inside: avoid;
+  -webkit-column-break-inside: avoid;
+  page-break-inside: avoid;
+  margin-bottom: 14px;
+}
+
+.tag-filter__col-title {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink-faded);
+}
+
+.tag-filter__list { display: flex; flex-direction: column; }
+
+.tag-filter__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--compact);
+  padding: 1px 6px;
+  /* Set from JS for nested tags; depth is data-driven, so it cannot live in a class here. */
+  padding-left: var(--tag-indent, 6px);
+  font-size: 14px;
+  color: var(--ink-charcoal);
+  font-family: var(--font-body);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  user-select: none;
+  /* NOT `white-space: nowrap`: a tag name longer than the column would overflow the panel and
+     break the "no horizontal scrolling" contract. Tag names are single words, so `anywhere` is
+     the only thing that can break them — it is inert for names that already fit. */
+  overflow-wrap: anywhere;
+}
+/* `hidden` 属性靠 UA 样式表的 `display: none` 生效，干不过上面那条作者样式的 `display: flex`
+   —— 不给行补这一条，`label.hidden = true`（按当前国家收窄标签面板）完全没效果，且不报错。
+   同 .country-scroll[hidden] / .overlap-tabs[hidden]。列本来没有 display 规则，hidden 有效，
+   一并写上只为两处规则同形。 */
+.tag-filter__item[hidden],
+.tag-filter__col[hidden] { display: none; }
+
+.tag-filter__item:hover { background: rgba(var(--soil-rgb), 0.06); }
+.tag-filter__item input[type="checkbox"] { flex: none; accent-color: var(--soil-dark); }
+.tag-filter__item--all {
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-warm);
+  margin-bottom: 2px;
+}
+
+.tag-filter__clear {
+  margin-top: 12px;
+  padding: 5px 14px;
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius);
+  background: var(--paper-light);
+  color: var(--ink-faded);
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+}
+.tag-filter__clear:hover { background: var(--paper-warm); color: var(--soil-dark); }
+.tag-filter__clear[hidden] { display: none; }
+
+.tag-filter__empty {
+  padding: 10px 4px;
+  font-size: 13px;
+  color: var(--ink-faded);
+}
+.tag-filter__empty[hidden] { display: none; }
+
+/* ===== 降低动态效果 (prefers-reduced-motion) =====
+   此前全站没有这条降级：站内有 `@keyframes analytics-spin` 的无限旋转和大量 transition，
+   对前庭功能障碍/晕动症用户没有退路。这条规则让系统里声明了"减少动态效果"的用户
+   拿到几乎瞬时完成的状态切换——最终状态与默认完全一致，只是不再播放过程。
+   必须用 !important：要盖过各处已有的 transition/animation 声明，这是该模式的标准写法。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== My Submissions 内容栏宽度 =====
+   这两条以前是 <main class="my-submissions"> 上的内联 style。内联样式在级联里高于
+   任何样式表规则，所以「放大时放宽这一列」必须先把它搬进样式表才写得动。
+   追加在文件末尾是刻意的：它原本享有内联的优先级，放到文件中间会被后面的规则反超。
+
+   max-width 只封顶、不撑宽 —— 块级元素 width:auto 仍由包含块决定，所以窄屏上这一列
+   照样等于视口宽度，1400 那条在手机上自然无效，不需要再包一层 @media。
+
+   为什么放宽的是这一列、而不是给地图单独开宽度：地图是 width:100%，100% 取的是这一列
+   的内容盒；只加宽地图会让它脱离这一列，左边缘和标题对不齐。
+   is-map-view 是必须的：否则从地图视图切回列表时，卡片的宽度会跟着地图的放大状态一起变。 */
+.my-submissions { max-width: 1400px; margin: 0 auto; padding: 24px 20px; }
+/* 卡片的这一列现在也是 1400px，与地图放大态同值。这条**保留不动**：它存在的理由是
+   「从地图切回列表时列宽不跳」，删掉就等于把这个理由交给「两条恰好相等」这个巧合。 */
+body.is-map-view.is-map-large .my-submissions { max-width: 1400px; }
+
+/* ===== My Submissions 筛选键：三行拼成一整块分段控件 =====
+   参考首页的 .view-toggle（行内 gap 0、相邻边不双线、只有最外侧的角是圆的）。
+   作用域必须限定在 .my-submissions —— .review-tab 是和 review.html 共用的类
+   （那边 26 处），全局改会把 review 页一起改掉。
+
+   三行（view / visibility / status）用 margin-top:-1px 让上下边框重合，拼成一整块。
+   几何全部写在这里而不是 HTML 内联 style：内联会盖过样式表规则，上一轮已经踩过一次。
+
+   为什么下圆角要挂状态类：底行会换人 —— visibility 不是 active 时 status 行整个隐藏，
+   这时收底的就是 visibility 行；地图视图下 controls-wrap 全隐藏，view-tabs 独自成块。 */
+.my-submissions #view-tabs { margin: 20px 0 0; }
+.my-submissions #controls-wrap { margin: -1px 0 20px; }   /* 上边 -1px 与 view-tabs 合缝 */
+.my-submissions #visibility-tabs { margin: 0; }
+.my-submissions #status-tabs { margin: -1px 0 0; }        /* 同上，与 visibility-tabs 合缝 */
+
+.my-submissions .review-tabs__row { gap: 0; }
+/* 放开裁剪。原来 .review-tabs__row 的 overflow-x:auto 是个滚动容器，而按钮铺满行高，
+   于是 :focus-visible 的 2px outline（还带 2px offset）被整圈切掉 —— 键盘用户看不到焦点。
+   不用改回 auto 来兜窄屏：按钮是 flex 项，挤不下时自己会缩（见上面 min-width:0），
+   而真正的窄屏降级在下面的 @media 里，两者都不会让内容溢出到列外。 */
+.my-submissions .review-tabs__row { overflow: visible; }
+
+.my-submissions .review-tab {
+  /* 自然宽度，按文字来，不铺满整行。仿首页 .view-toggle__btn，但整块靠左站而不是居中。
+     这里刻意不写 flex:1 —— 那是上一版的等分做法，两个字的 "List" 会被撑到 431px。
+     min-width:0 保留：万一某行真的挤不下，宁可按钮自己缩、也不要溢出到列外面去
+     （body 有 overflow-x:hidden，溢出的部分会被直接裁掉、看不见也够不着）。 */
+  min-width: 0;
+  padding: 0 14px;
+  border-radius: 0;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: hidden;
+}
+/* 相邻按钮去掉重复的竖线 —— 与首页 .view-toggle__btn:last-child 的 border-left:none 同手法 */
+.my-submissions .review-tab + .review-tab { border-left: none; }
+
+/* 顶行：只圆上面两角 */
+.my-submissions #view-tabs .review-tab:first-child { border-radius: var(--radius) 0 0 0; }
+.my-submissions #view-tabs .review-tab:last-child  { border-radius: 0 var(--radius) 0 0; }
+
+/* 底行：默认是 status 行 */
+.my-submissions #status-tabs .review-tab:first-child { border-radius: 0 0 0 var(--radius); }
+.my-submissions #status-tabs .review-tab:last-child  { border-radius: 0 0 var(--radius) 0; }
+
+/* status 行隐藏时，改由 visibility 行收底（类由 switchVisibility() 维护） */
+body.is-status-hidden .my-submissions #visibility-tabs .review-tab:first-child { border-radius: 0 0 0 var(--radius); }
+body.is-status-hidden .my-submissions #visibility-tabs .review-tab:last-child  { border-radius: 0 0 var(--radius) 0; }
+
+/* 地图视图下 controls-wrap 整个隐藏，view-tabs 独自成块 → 四角都要圆 */
+body.is-map-view .my-submissions #view-tabs .review-tab:first-child { border-radius: var(--radius) 0 0 var(--radius); }
+body.is-map-view .my-submissions #view-tabs .review-tab:last-child  { border-radius: 0 var(--radius) var(--radius) 0; }
+
+/* 搜索 / 排序 / 国家筛选：从 status 行里搬出来独立成行，边缘不再和上面的分段块参差 */
+.my-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+/* 「Edit country notes」放在筛选栏右端（原来在 h1 下面、整块之上）。
+   margin-left:auto 把它顶到行尾，和左边那组筛选控件分开。 */
+.my-filter-row .country-notes-link { margin-top: 0; margin-left: auto; }
+/* tooltip 的锚点跟着翻边：默认是 left:0（从链接左缘往右伸，宽 280px），
+   链接到了右端之后会伸到列外面，被 body 的 overflow-x:hidden 直接裁掉。 */
+.my-filter-row .country-notes-link[data-tooltip]::after { left: auto; right: 0; }
+
+/* 自然宽度的按钮在小屏上会挤不下（四段的 status 行最宽：320px 视口只有 280px 可用）。
+   收窄横向 padding 让它自己装得下，而不是靠 flex 压缩 —— 压缩会让文字被裁。
+   400px 用的是仓库已有的断点（见文件顶部的断点清单）。
+   块写在文件末尾是必须的：同优先级下要和上面那条 .my-submissions .review-tab 比晚。 */
+@media (max-width: 400px) {
+  .my-submissions .review-tab { padding: 0 8px; }
+}
+
+/* --- 2026-09-28 筛选项降高：44 → 32 -----------------------------------------
+   三行分段块、排序键、国家键一起降，整条筛选区才齐（原来三个都是 min-height: 44px）。
+   ⚠️ 44px 是全站触控目标的标准：`.review-btn--*`、`.map-tools > *`、`.review-reload-btn`
+   都是 44×44，`test-map-controls.js` 还有一条 `MIN_TARGET = 40` 守着地图那批。
+   这里**是有意降级**（这一排控件密集、以鼠标为主），32px 仍是 W3C / Microsoft 触控目标的
+   常见下限。选择器带 `.my-submissions` 前缀，所以 (0,2,0) 稳压基础规则 (0,1,0) 与
+   各处媒体查询里的 `.review-tab { min-height: 44px }`，不必关心先后顺序。 */
+.my-submissions .review-tab,
+.my-submissions .sort-toggle,
+.my-filter-row .sort-toggle,
+.my-submissions .country-filter__btn,
+.my-filter-row .country-filter__btn { min-height: var(--compact); }
+/* 光给 min-height 不够：这两个键的基础规则是 `padding: 8px 14px`，13px 字号撑出的自然高度
+   是 33px（15 行高 + 16 上下 padding + 2 边框），min-height 根本轮不到生效，一行里就会
+   比 32px 的分段键高出 1px。竖向 padding 归零，高度交给 min-height —— 和 `.review-tab`
+   的 `padding: 0 14px` 同一个手法。 */
+.my-submissions .sort-toggle,
+.my-filter-row .sort-toggle,
+.my-submissions .country-filter__btn,
+.my-filter-row .country-filter__btn { padding: 0 14px; }
+
+/* --- 放大镜搜索键（与 explore 共用 js/search-chip.js 与 .search-chip 外观）----
+   与 explore 的**唯一**结构差异：展开层不浮动。
+   explore 那边 `.search-chip__field` 是绝对定位浮在地图上，因为它右边只有地图；这里右边是
+   「Edit country notes」链接（margin-left:auto 顶到行尾），浮动就会盖住它，窄屏尤其明显。
+   改成 flex 项后交给行自身的 `flex-wrap` 兜底：
+     · 空间够  → 它填满放大镜与链接之间的空白，链接原地不动；
+     · 空间不够 → `min-width: 180px` 撑不下的那一行把它整个挤到下一行，输入框占满一行。
+   没有一处视口算式，也不需要 JS 参与。 */
+.my-submissions .search-chip { flex: 1 1 auto; min-width: var(--compact); display: flex; }
+.my-filter-row .search-chip { flex: 0 0 auto; min-width: var(--compact); display: flex; }
+.my-submissions .search-chip__field,
+.my-filter-row .search-chip__field {
+  position: static;
+  flex: 1 1 auto;
+  min-width: 180px;
+  height: var(--compact);
+  padding: 0 4px 0 6px;
+}
+.my-submissions .search-chip__input,
+.my-filter-row .search-chip__input { width: auto; max-width: none; flex: 1 1 auto; min-width: 0; font-size: 13px; }
+/* 只留字形本身：去底、去框，图标放大到 20px（与 explore 的图标同尺寸）。
+   盒子仍是 32px —— 它不再画出来，只当命中区用，同时跟同行三个键齐平。
+   ⚠️ hover 那一行**必须一起改**：基础规则 `.search-chip__toggle:hover`（style.css 上方）
+   写着 `background: #f2f2f2`，不覆盖的话无框按钮一悬停反而浮出一个灰方块，比带框时更脏。
+   反馈改由颜色给，与 `.my-pager-btn` 同一手法。
+   图标颜色**不调浅**：去掉框之后视觉重量已经轻了，再调浅就找不着了。
+   ⚠️ 这里和 explore 刻意不一致 —— explore 的放大镜是 44×44 的带框控件（要跟 Leaflet 那列
+   长得一样），同一行里塞一个 44px 会比邻居高出一截，所以按行高来。
+   `min-width/min-height: 0` 必须写：那两条基础规则给的是 44px。 */
+.my-submissions .search-chip__toggle,
+.my-filter-row .search-chip__toggle {
+  width: var(--compact); height: var(--compact); min-width: 0; min-height: 0;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  /* ⚠️ 必须把颜色从共享规则那份 --ink-fill 拉回主题色。共享规则默认的是「衬在白底盘上的
+     深色前景」，而这里底色被摘掉了 —— 它坐在**页面**上，深色模式下页面是暗的，
+     再用那个不随主题翻转的深褐就等于看不见。这一句是上面「去掉框」的直接后果。 */
+  color: var(--ink-charcoal);
+}
+.my-submissions .search-chip__toggle:hover,
+.my-filter-row .search-chip__toggle:hover { background: none; color: var(--soil-dark); }
+.my-submissions .search-chip__toggle svg,
+.my-filter-row .search-chip__toggle svg { width: 20px; height: 20px; }
+
+/* --- 翻页键：去掉边框与底色 ------------------------------------------------
+   原来 prev/next 直接借 `.review-btn--approve`（深绿实心），在一行纯文字中间很重。
+   现在只剩文字，靠 hover 变色给反馈；命中区仍留 44px 高，缩到 32 会把翻页变成难点的目标。
+   用 <button> 而不是链接：它们是页内状态切换，不是导航，中键/新标签页打开没有意义。 */
+.my-pager-btn {
+  min-height: var(--mid);
+  padding: 0 10px;
+  border: none;
+  background: none;
+  border-radius: var(--radius-sm);
+  color: var(--ink-faded);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+}
+.my-pager-btn:hover { color: var(--soil-dark); }
+.my-pager-btn:disabled { color: var(--ink-subtle); cursor: default; }
+
+/* ===== Submission source attribution =====
+   共享组件：徽章由 js/utils.js 的 buildSourceBadge() 生成，五个显示面
+   （explore 弹窗 / 首页 Most Useful 卡片 / my-submissions / review 列表与编辑表单）共用。
+   整个徽章就是一条指向出处的链接，新标签页打开。
+   加在文件末尾：徽章既要覆盖 review 页的 item 样式，也要压过首页卡片的覆盖式链接。
+
+   无边框、无底色、无内边距 —— 徽章读起来是一行普通文字，只有 hover 时才浮起来。
+   原来靠边框变色给出的 hover 反馈，改由文字变色 + 下划线承担。
+   代价说清楚：点击区域从「药丸」缩到文字本身，所以字号只许往上不许往下调
+   （11px 时去掉内边距会让目标过小；现在 13px + 15px 图标仍然好点）。 */
+.source-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--ink-faded, #7a7265);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.source-badge:hover {
+  color: var(--soil-dark, #2d5a3d);
+  text-decoration: underline;
+}
+/* 图标与文字同高，object-fit 避免非方形源文件被拉扁 */
+.source-badge__icon {
+  width: 15px;
+  height: 15px;
+  display: block;
+  object-fit: contain;
+}
+
+/* 首页 Most Useful 卡片改用「覆盖式链接」后的结构（见 index.html buildUsefulCard）：
+   根元素从 <a> 改成 <div>，卡片里不能再嵌套第二个 <a>（非法 HTML）。
+   主链接是一条铺满整卡的透明覆盖层，徽章抬到它上面单独可点。 */
+.useful-card__link {
+  position: absolute;
+  inset: 0;
+}
+.useful-card__source {
+  position: relative;
+  z-index: 1;
+}
+
+/* ===== Submit 页的来源选择器（可选） =====
+   四个 chip 单选，选中后才出现网址输入框；反馈复用 .link-row__status /
+   .link-row__error 的视觉（见 submit.html 内联块），不另起一套语言。 */
+.source-picker__hint {
+  font-size: 12px;
+  color: var(--ink-faded, #7a7265);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* 无边框、无底色 —— 四个 chip 就是一行朴素的小图标/小字，不做成按钮盒子。
+   代价是选中态没了"深色底"可用，所以状态改由另外两个信号承担：
+   图标 chip 看不透明度（压暗 → 原色），文字 chip 看颜色（灰 → 深绿）。
+   min-height 与左右 padding 保留，去掉边框不能连触摸目标一起缩小。 */
+.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1;
+  min-height: var(--mid);
+  padding: 8px 6px;
+  border: 0;
+  background: none;
+  color: var(--ink-faded, #7a7265);
+  cursor: pointer;
+}
+.source-chip:hover { color: var(--ink-charcoal, #2c2416); }
+.source-chip[aria-pressed="true"] { color: var(--soil-dark, #2d5a3d); }
+/* 无边框后焦点环是键盘用户唯一的位置提示，不能省 */
+.source-chip:focus-visible {
+  outline: 2px solid var(--soil-dark, #2d5a3d);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+.source-chip__icon {
+  width: 22px;
+  height: 22px;
+  display: block;
+  object-fit: contain;
+  /* 图标 chip 的选中信号。原来靠选中态垫白底，现在底色没了，垫底也一并去掉。 */
+  opacity: 0.4;
+  transition: opacity 0.12s ease;
+}
+.source-chip:hover .source-chip__icon { opacity: 0.7; }
+.source-chip[aria-pressed="true"] .source-chip__icon { opacity: 1; }
+.source-url-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.source-url-row[hidden] { display: none; }

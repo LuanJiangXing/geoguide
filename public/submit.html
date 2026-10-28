@@ -1,0 +1,3551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Submit — GeoGuide</title>
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMjgiIGZpbGw9IiM0QTdDNTkiIHN0cm9rZT0iIzNCNjA0NyIgc3Ryb2tlLXdpZHRoPSIyLjUiLz48ZWxsaXBzZSBjeD0iMzIiIGN5PSIzMiIgcng9IjEyIiByeT0iMjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhEQkY5QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG9wYWNpdHk9IjAuNyIvPjxsaW5lIHgxPSI0IiB5MT0iMzIiIHgyPSI2MCIgeTI9IjMyIiBzdHJva2U9IiM4REJGOUEiIHN0cm9rZS13aWR0aD0iMS44IiBvcGFjaXR5PSIwLjciLz48cGF0aCBkPSJNMzIgMTZjLTYgMC0xMSA0LjUtMTEgMTAgMCA3LjUgMTEgMjIgMTEgMjJzMTEtMTQuNSAxMS0yMmMwLTUuNS01LTEwLTExLTEweiIgZmlsbD0iI0Y0RDM1RSIgc3Ryb2tlPSIjQzRBNTJBIiBzdHJva2Utd2lkdGg9IjEuOCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMjYiIHI9IjQiIGZpbGw9IiNDNEE1MkEiLz48L3N2Zz4=">
+  <!-- Warm up the CDN origins this page actually fetches from. Scripts are load-time and
+       block parsing, so they get a full preconnect (no `crossorigin` — classic <script> is a
+       no-cors fetch, and adding it would open a second, unused connection). Image origins are
+       only needed once content renders, so they get dns-prefetch instead of a connection that
+       would sit idle and be reaped. Credit links in the footer point at domains this page never
+       requests — they are deliberately absent. -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+  <script src="js/theme.js?v=3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.20.0/dist/leaflet-geoman.css" />
+  <link rel="stylesheet" href="css/style.css?v=171" />
+  <style>
+    .link-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .link-row__input-wrap {
+      flex: 1;
+      min-width: 0;
+    }
+    .link-row__input {
+      width: 100%;
+      font-size: 16px;
+      min-height: 44px;
+      padding: 8px 12px;
+      border: 1px solid var(--ink-faded);
+      border-radius: 6px;
+      font-family: var(--font-body);
+      background: var(--paper);
+      color: var(--ink);
+      box-sizing: border-box;
+    }
+    .link-row__status {
+      flex: 0 0 auto;
+      width: 20px;
+      font-size: 16px;
+      text-align: center;
+    }
+    .link-row__status.is-resolved { color: var(--feedback-green); }
+    .link-row__status.is-failed { color: var(--feedback-red); }
+    .link-row__status.is-resolving { color: var(--ink-faded); animation: pulse 1s infinite; }
+    .link-row__error {
+      width: 100%;
+      font-size: 12px;
+      color: var(--feedback-red);
+      padding-left: 4px;
+      display: none;
+    }
+    .link-row__remove {
+      flex: 0 0 auto;
+      width: 44px; height: 44px;
+      border: none;
+      background: none;
+      font-size: 24px;
+      color: var(--ink-faded);
+      cursor: pointer;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      line-height: 1;
+    }
+    .link-row__remove:hover { color: var(--feedback-red); background: rgba(0,0,0,0.05); }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+  </style>
+</head>
+<body class="allow-scroll">
+  <nav class="nav">
+    <a href="/" class="nav__logo">GeoGuide</a>
+  </nav>
+
+  <div id="submit-form" style="display:none;">
+    <div class="mobile-warning" id="mobile-warning" hidden>
+      <span>&#9888; For the best experience, use a desktop browser to draw regions.</span>
+      <button class="mobile-warning__dismiss" id="mobile-warning-dismiss" aria-label="Dismiss">&times;</button>
+    </div>
+    <div class="submit-layout">
+      <div id="submit-map" class="submit-layout__map">
+        <!-- 国家范围模式的置灰遮罩。放在 Leaflet 容器内部是安全的：L.map() 只往容器里
+             追加自己的 pane，不会清空既有子节点。z-index 500 压在 pane(400) 之上、
+             控件层(800/1000) 之下，而工具条本身在该模式下被 CSS 隐藏。 -->
+        <div class="submit-map-note" id="submit-map-note" hidden></div>
+      </div>
+      <div class="submit-layout__form">
+        <h2>Submit New Region</h2>
+        <!-- 范围开关必须在**动手画之前**：选「整个国家」会把左边画布的工作量整个归零，
+             所以它得排在所有字段之前，也让下面的名称标签能跟着换文案。 -->
+        <div class="form-group">
+          <label>Submission scope</label>
+          <div class="scope-choice" role="radiogroup" aria-label="Submission scope">
+            <label class="scope-choice__opt">
+              <input type="radio" name="scope" value="region" checked />
+              <span>A specific region</span>
+            </label>
+            <label class="scope-choice__opt">
+              <input type="radio" name="scope" value="country" />
+              <span>A whole country</span>
+            </label>
+          </div>
+          <p class="scope-hint" id="scope-hint"></p>
+        </div>
+        <div class="form-group">
+          <label for="region-name" id="region-name-label">Region Name</label>
+          <input type="text" id="region-name" placeholder="e.g. Cape Town Table Mountains" maxlength="60" />
+        </div>
+        <div class="form-group">
+          <label for="region-country">Country / Region</label>
+          <select id="region-country">
+            <option value="">--Select country/region--</option>
+          </select>
+          <div class="country-propose-hint" style="font-size:12px; margin-top:4px; color:var(--ink-faded);">
+            Don’t see your country? <a href="javascript:void(0)" id="propose-country-link" style="color:var(--accent); text-decoration:underline;">Propose a new country</a>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="region-desc">Short Description</label>
+          <textarea id="region-desc" placeholder="e.g. coastal, green, hilly smallcam" maxlength="300"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="region-detail-desc">Detailed Description (optional)</label>
+          <textarea id="region-detail-desc" placeholder="e.g. write more details here..." maxlength="2000"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Tags</label>
+          <div class="tag-selector" id="tag-selector">
+            <select id="tag-category-select">
+              <option value="">-- Select category --</option>
+            </select>
+            <div class="tag-chips" id="tag-chips"></div>
+            <div class="selected-tags" id="selected-tags-display"></div>
+          </div>
+        </div>
+        <div class="form-group">
+          <button type="button" class="toggle-propose" id="toggle-propose">+ Propose new tags</button>
+          <div class="propose-tags" id="propose-tags" hidden>
+            <input type="text" id="proposed-tag-names" placeholder="Tag name(s), comma-separated" />
+            <select id="proposed-tag-category">
+              <option value="">-- Select category --</option>
+            </select>
+            <button type="button" class="add-proposed" id="add-proposed">Add to proposal</button>
+            <div class="propose-error" id="propose-error" hidden></div>
+            <div class="proposed-list" id="proposed-list"></div>
+          </div>
+        </div>
+        <div class="form-group" id="link-list-container">
+          <label>Google Maps Links <span style="font-weight:400;color:var(--ink-faded);">(1–5)</span></label>
+          <div id="link-inputs">
+            <!-- Dynamic link rows inserted by JS -->
+          </div>
+          <button type="button" class="btn btn--secondary" id="add-link-btn" style="margin-top:8px;font-size:13px;">+ Add another link</button>
+        </div>
+        <div class="form-group" id="source-group">
+          <label for="source-url">Source <span style="font-weight:400;color:var(--ink-faded);">(optional)</span></label>
+          <p class="source-picker__hint">If this submission quotes another guide, credit it here. Pick the source, then paste the link.</p>
+          <div class="source-chips" id="source-chips">
+            <!-- plonkit / rmrg 只用图标：图标本身认得出来，不再叠文字。
+                 图标是按钮的唯一内容，所以可读名称必须补在按钮上，否则读屏只剩一个"按钮"。 -->
+            <button type="button" class="source-chip" data-source="plonkit" aria-pressed="false" aria-label="Plonk It">
+              <img class="source-chip__icon" src="images/source-plonkit.webp" alt="" aria-hidden="true" />
+            </button>
+            <button type="button" class="source-chip" data-source="rmrg" aria-pressed="false" aria-label="RMRG">
+              <img class="source-chip__icon" src="images/source-rmrg.png" alt="" aria-hidden="true" />
+            </button>
+            <button type="button" class="source-chip" data-source="geohints" aria-pressed="false">GeoHints</button>
+            <button type="button" class="source-chip" data-source="other" aria-pressed="false">Other</button>
+          </div>
+          <div class="source-url-row" id="source-url-wrap" hidden>
+            <div class="link-row__input-wrap">
+              <input type="url" class="link-row__input" id="source-url" maxlength="300" placeholder="https://..." />
+            </div>
+            <span class="link-row__status" id="source-status" aria-label="Source link status"></span>
+            <div class="link-row__error" id="source-error"></div>
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-bottom:12px;">
+          <button type="button" class="btn btn--secondary" id="reuse-last-btn" style="display:none;">&#8635; Reuse last geometry</button>
+          <input type="file" id="import-file" accept=".geojson,.json,.kml" style="display:none;" />
+          <button type="button" class="btn btn--secondary" id="import-btn">&#8681; Import GeoJSON/KML</button>
+        </div>
+        <button class="form-submit" id="submit-btn">Submit</button>
+        <div class="form-feedback" id="form-feedback"></div>
+        <div class="form-notice">After submission, your entry will be reviewed. Approved entries will appear on the map after the next site update. By submitting, you agree to publish your contribution under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">CC BY-NC-SA 4.0</a>. If your submission quotes other sources, please credit them.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Proposal Modal -->
+  <div id="proposal-backdrop" class="proposal-backdrop" hidden aria-hidden="true"></div>
+  <div id="proposal-modal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="proposal-modal-title" hidden>
+    <div class="proposal-modal__header">
+      <h3 id="proposal-modal-title">Propose a New Country / Region</h3>
+      <button class="proposal-modal__close" id="proposal-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="proposal-modal__body">
+      <div class="proposal-section">
+        <label for="proposal-country-select">Country</label>
+        <p class="proposal-hint">Select from the list. Don't see it? It may already be on GeoGuide.</p>
+        <select id="proposal-country-select" style="width:100%;">
+          <option value="">-- Select a country --</option>
+        </select>
+      </div>
+      <div class="proposal-divider"><span>or</span></div>
+      <div class="proposal-section">
+        <label for="proposal-region">Region</label>
+        <p class="proposal-hint">e.g. Alaska / Nordics / South-East Asia, etc. Max 20 characters.</p>
+        <input type="text" id="proposal-region" maxlength="20" placeholder="Enter region name" />
+      </div>
+      <div class="proposal-divider"></div>
+      <div class="proposal-section">
+        <label>Your goal</label>
+        <div class="proposal-meta-toggle" id="proposal-meta-toggle" role="radiogroup" aria-label="Meta goal">
+          <button type="button" class="meta-toggle-btn" data-value="provide" aria-pressed="false">Provide meta</button>
+          <button type="button" class="meta-toggle-btn" data-value="learn" aria-pressed="false">Learn meta</button>
+        </div>
+      </div>
+      <div class="proposal-divider"></div>
+      <div class="proposal-section">
+        <label for="proposal-reason">Reason (optional)</label>
+        <p class="proposal-hint">Why should this country or region be added? Max 60 characters.</p>
+        <textarea id="proposal-reason" maxlength="60" rows="2" placeholder="Brief reason..."></textarea>
+      </div>
+      <div class="proposal-modal__actions">
+        <button id="proposal-cancel-btn" class="modal-btn modal-btn--ghost">Cancel</button>
+        <button id="proposal-submit-btn" class="modal-btn modal-btn--primary">Submit Proposal</button>
+      </div>
+      <div id="proposal-error" style="color:var(--feedback-red);font-size:13px;margin-top:8px;display:none;"></div>
+    </div>
+  </div>
+
+  <div id="login-gate" style="display:none;text-align:center;padding:60px 20px;">
+    <h2 style="font-family:var(--font-display);margin-bottom:12px;">Login Required</h2>
+    <p style="color:var(--ink-faded);margin-bottom:20px;">Please log in with Discord to submit a region.</p>
+    <a href="/api/auth?action=login" class="form-submit" style="text-decoration:none;display:inline-block;">Login with Discord</a>
+  </div>
+
+  <script src="js/auth.js?v=12"></script>
+  <script src="js/utils.js?v=28"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/@geoman-io/leaflet-geoman-free@2.20.0/dist/leaflet-geoman.js"></script>
+  <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
+  <script src="https://unpkg.com/leaflet.gridlayer.googlemutant@0.16.0/dist/Leaflet.GoogleMutant.js"></script>
+  <script src="https://unpkg.com/@tmcw/togeojson@5.8.1/dist/togeojson.umd.js"></script>
+  <script src="js/basemap.js?v=3"></script>
+  <script>
+    var map = L.map('submit-map', {
+      center: [20, 0],
+      zoom: 2,
+      minZoom: 2
+    });
+    var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+    }).addTo(map);
+
+    // 底图切换（OSM ↔ Google 道路图）
+    if (typeof window.initBasemapSwitcher === 'function') {
+      window.initBasemapSwitcher(map, osmLayer);
+    }
+
+    // Enable drawing controls
+    map.pm.addControls({ position: 'topleft', drawMarker: true, drawCircle: false,
+      drawCircleMarker: false, drawPolyline: true, drawRectangle: false,
+      drawText: false, cutPolygon: false, rotateMode: false });
+
+    // 同类型连续绘制：画完一个线/多边形后保持该工具的绘制态，
+    // 使 Finish / Remove Last Vertex / Cancel 按钮在画完后继续显示（Marker 默认已如此）。
+    map.pm.Draw.Line.setOptions({ continueDrawing: true });
+    map.pm.Draw.Polygon.setOptions({ continueDrawing: true });
+
+    // 中间截断 + 撤销：绘制 Line 时点击线中间的某个点，删除该点之后的所有段，并从截断点继续绘制。
+    // Geoman 没有此接口（唯一删除是 _removeLastVertex，一次退最后一段）。
+    // 实现：复用 pm:vertexadded 事件 + _removeLastVertex 的内部写法，不改 Geoman 源码。
+    //   · 点击线中间 → 截断到最近顶点（或最近线段的起点）；点击中间顶点圆点同样截断。
+    //   · 点击首点仍为结束绘制（保持 Geoman 原手势）。
+    //   · 只对 Line 生效；Polygon/其它工具不受影响。
+    //   · 误点截断可撤销：Ctrl+Z / ⌘Z，或工具栏「↶ 撤销截断」按钮（_truncateUndo 栈，每个绘制会话独立）。
+
+    function truncateUndoStack() {
+      return map.pm.Draw.Line._truncateUndo || (map.pm.Draw.Line._truncateUndo = []);
+    }
+
+    // 按当前撤销栈重建 Line 工具栏 action：有可撤销记录时插入「撤销截断」按钮
+    function refreshLineActions() {
+      if (!map.pm || !map.pm.Toolbar) return;
+      var acts = ['finish', 'removeLastVertex', 'cancel'];
+      if (truncateUndoStack().length > 0) {
+        acts.splice(1, 0, { name: 'undoTruncate', text: '↶ Undo Trim', title: 'Undo Trim (Ctrl+Z)', onClick: undoLastTruncate });
+      }
+      try { map.pm.Toolbar.changeActionsOfControl('drawPolyline', acts); } catch (e) {}
+    }
+
+    // 撤销最近一次截断：把删掉的顶点 marker 与坐标插回截断点（若截断后又画了新段，新段保留在尾部）
+    function undoLastTruncate() {
+      var draw = map.pm.Draw.Line;
+      if (!draw || !draw.enabled || !draw.enabled()) return;
+      var undo = truncateUndoStack();
+      if (!undo.length) return;
+      var rec = undo.pop();
+      Array.prototype.splice.apply(draw._markers, [rec.idx + 1, 0].concat(rec.markers));
+      rec.markers.forEach(function(m) { draw._layerGroup.addLayer(m); });
+      var cur = draw._layer.getLatLngs();
+      draw._layer.setLatLngs(cur.slice(0, rec.idx + 1).concat(rec.removedCoords).concat(cur.slice(rec.idx + 1)));
+      if (draw._layer._latlngInfo) {
+        var ci = draw._layer._latlngInfo;
+        draw._layer._latlngInfo = ci.slice(0, rec.idx + 1).concat(rec.removedLatlngInfo).concat(ci.slice(rec.idx + 1));
+      }
+      draw._syncHintLine();
+      draw._setTooltipText();
+      draw._change(draw._layer.getLatLngs());
+      refreshLineActions();
+    }
+
+    // 截断后短暂提示可撤销
+    function showTruncateToast() {
+      var t = document.getElementById('truncate-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'truncate-toast';
+        t.className = 'toast';
+        t.textContent = 'Trimmed · Ctrl+Z or "Undo Trim" to restore';
+        document.body.appendChild(t);
+      }
+      t.classList.add('toast--visible');
+      clearTimeout(showTruncateToast._timer);
+      showTruncateToast._timer = setTimeout(function() { t.classList.remove('toast--visible'); }, 2500);
+    }
+
+    // 统一截断：把线截到顶点 idx（保留 0..idx）。非中间顶点/线过短返回 false（交给默认行为：结束绘制）。
+    function cutLineAt(draw, idx) {
+      if (!draw || !draw.enabled || !draw.enabled()) return false;
+      var markers = draw._markers;
+      var n = markers.length;
+      if (n < 3 || idx <= 0 || idx >= n - 1) return false;
+      var removed = markers.splice(idx + 1);
+      removed.forEach(function(m) { draw._layerGroup.removeLayer(m); });
+      var coords = draw._layer.getLatLngs();
+      var newCoords = coords.slice(0, idx + 1);
+      var removedCoords = coords.slice(idx + 1);
+      var info = draw._layer._latlngInfo || [];
+      var removedInfo = info.slice(idx + 1);
+      draw._layer.setLatLngs(newCoords);
+      draw._layer._latlngInfo = info.slice(0, idx + 1);
+      // 记录撤销信息，刷新工具栏按钮，提示可撤销
+      truncateUndoStack().push({ idx: idx, markers: removed, removedCoords: removedCoords, removedLatlngInfo: removedInfo });
+      refreshLineActions();
+      showTruncateToast();
+      clearTrimHover();   // 清掉可能残留的"将被删除"高亮（截断后鼠标仍在线上，下次 mousemove 会重新判定）
+      // 虚线回到新末点、tooltip 更新、触发 pm:change
+      draw._syncHintLine();
+      draw._setTooltipText();
+      draw._change(newCoords);
+      return true;
+    }
+
+    // 点到线段的像素距离（投影平面，用于找用户点击处所在的线段）
+    function distPointSeg(p, a, b) {
+      var dx = b.x - a.x, dy = b.y - a.y;
+      var len2 = dx * dx + dy * dy;
+      if (len2 === 0) {
+        return Math.sqrt((p.x - a.x) * (p.x - a.x) + (p.y - a.y) * (p.y - a.y));
+      }
+      var t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+      t = Math.max(0, Math.min(1, t));
+      var qx = a.x + t * dx, qy = a.y + t * dy;
+      return Math.sqrt((p.x - qx) * (p.x - qx) + (p.y - qy) * (p.y - qy));
+    }
+
+    // 命中判定放大：给截断一个像素容差，避免"点不到"（线本身只有 3px 描边可点，顶点圆点只有 14px）。
+    // 顶点附近 TRIM_TOL px 内按顶点截断（minV <= minD 表示点击更接近顶点）；否则线上 TRIM_TOL px 内按最近线段起点截断。
+    // 首点/末点/首段/不足 3 点 → 返回 null，不拦截，走 Geoman 默认行为（结束绘制 / 加顶点）。
+    var TRIM_TOL = 16;   // px，命中半径
+    function hitTestTrim(draw, latlng) {
+      var coords = draw._layer.getLatLngs();
+      var n = coords.length;
+      if (n < 3) return null;   // 少于 3 个点没有中间截断点
+      var z = draw._map.getZoom();
+      var p = draw._map.project(latlng, z);
+      var bestV = -1, minV = Infinity;
+      for (var j = 0; j < n; j++) {
+        var dv = p.distanceTo(draw._map.project(coords[j], z));
+        if (dv < minV) { minV = dv; bestV = j; }
+      }
+      var bestSeg = -1, minD = Infinity;
+      for (var i = 0; i < n - 1; i++) {
+        var d = distPointSeg(p, draw._map.project(coords[i], z), draw._map.project(coords[i + 1], z));
+        if (d < minD) { minD = d; bestSeg = i; }
+      }
+      var tol = TRIM_TOL;
+      if (minV <= minD) {
+        // 命中判定优先顶点：只有中间顶点可截断
+        if (minV <= tol && bestV > 0 && bestV < n - 1) return { idx: bestV, type: 'vertex' };
+        return null;
+      }
+      // 否则按最近线段：只有非首段可截断（首段起点=首点）
+      if (minD <= tol && bestSeg > 0) return { idx: bestSeg, type: 'segment' };
+      return null;
+    }
+
+    // —— 命中放大 + 悬浮反馈：透明加宽命中层 + 红色"将被删除"尾部 ——
+    var trimHitPath = null;   // 覆盖工作线的透明加宽命中层（仅 Line 绘制态存在）
+    var trimTail = null;      // 悬停时的红色虚线尾部高亮（将被删除的部分）
+    function setTrimCursor(on) {
+      var c = map.getContainer();
+      if (c) { c.style.cursor = on ? 'pointer' : ''; }
+    }
+    // 悬浮提示 tooltip：悬停可截断位置 → "✂ Click to trim"；移开恢复 Geoman 默认（"Click any existing marker to finish" 等）
+    var TRIM_TOOLTIP = '✂ Click to trim';
+    function setTrimTooltip(txt) {
+      var draw = map.pm.Draw.Line;
+      if (draw && draw._hintMarker && draw._hintMarker.setTooltipContent) {
+        draw._hintMarker.setTooltipContent(txt);
+      }
+    }
+    function restoreTrimTooltip() {
+      var draw = map.pm.Draw.Line;
+      if (draw && draw.enabled && draw.enabled() && draw._setTooltipText) {
+        draw._setTooltipText();
+      }
+    }
+    function clearTrimHover() {
+      if (trimTail) { map.removeLayer(trimTail); trimTail = null; }
+      setTrimCursor(false);
+      restoreTrimTooltip();
+    }
+    function syncTrimHitPath(coords) {
+      if (!trimHitPath) {
+        // 白色 24px 描边、几乎透明 → "点击线上"的有效范围从 3px 放大到 ±12px。
+        // 注意：不要设 bubblingMouseEvents:false —— 非截断点击（首段/首点附近/2点线段的"加顶点"）
+        // 需要照常冒泡到 map 走 Geoman 默认行为；截断时靠点击处理里的 L.DomEvent.stop(ce) 阻止。
+        trimHitPath = L.polyline(coords || [], {
+          stroke: true, color: '#fff', weight: 24, opacity: 0.01,
+          interactive: true
+        }).addTo(map);
+        try { trimHitPath.bringToFront(); } catch (err) {}
+      } else {
+        trimHitPath.setLatLngs(coords || []);
+      }
+    }
+    function showTrimTail(coords) {
+      if (!coords || !coords.length) { clearTrimHover(); return; }
+      if (!trimTail) {
+        trimTail = L.polyline(coords, {
+          stroke: true, color: '#e53935', weight: 5, opacity: 0.75,
+          dashArray: '6 8', lineCap: 'round', interactive: false
+        }).addTo(map);
+        try { trimTail.bringToFront(); } catch (err) {}
+      } else {
+        trimTail.setLatLngs(coords);
+      }
+    }
+    function cleanupTrimUI() {
+      if (trimHitPath) { map.removeLayer(trimHitPath); trimHitPath = null; }
+      clearTrimHover();
+    }
+
+    // --- 自动解析预填国家 ----------------------------------------------------
+    // 当玩家放置 Marker、Line 的首个顶点、或 Polygon 的首个顶点时，解析经纬度所属国家：
+    //   1. 若玩家已选国家且与解析国家一致：不做任何事。
+    //   2. 若玩家已选国家但与解析国家不一致：弹出 prompt toast 询问是否要更改，但不自动改。
+    //   3. 若玩家尚未选择国家：自动预填该国家，并弹 toast 告知用户。
+    // 领土/细分特别支持：如 Hawaii 优先匹配独立区域条目 'hawaii'。
+
+    function matchCountryFromGeoData(data, lat, lng, map) {
+      if (!data || !data.countryCode) return null;
+      var code = data.countryCode.toUpperCase();
+      var sub = (data.principalSubdivision || '').toLowerCase();
+
+      // Hawaii 细分 / 经纬度特别支持
+      if (code === 'US' && (sub === 'hawaii' || (lat >= 18 && lat <= 23 && lng >= -161 && lng <= -154))) {
+        if (map['hawaii'] && map['hawaii'].active) return 'hawaii';
+      }
+
+      // 按 flag (ISO2) 匹配活跃国家
+      for (var id in map) {
+        var c = map[id];
+        if (!c.active) continue;
+        if (c.flag && c.flag.toUpperCase() === code) return id;
+      }
+
+      // 按 slug 别名或名称
+      var slug = (data.countryName || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      if (slug === 'turkiye' && map['turkey'] && map['turkey'].active) return 'turkey';
+      if (map[slug] && map[slug].active) return slug;
+
+      for (var id2 in map) {
+        var c2 = map[id2];
+        if (!c2.active) continue;
+        if (c2.name && data.countryName && c2.name.toLowerCase() === data.countryName.toLowerCase()) return id2;
+      }
+
+      return null;
+    }
+
+    function matchCountryFromBounds(lat, lng, map) {
+      var candidates = [];
+      for (var id in map) {
+        var c = map[id];
+        if (!c.active || !c.bounds_sw || !c.bounds_ne) continue;
+        // 真实地理硬约束：东经 50°~125° 之间且北纬 < 50°，属于哈萨克斯坦、中亚、蒙古及中国西部，绝不能被俄罗斯包围盒误判
+        if (id === 'russia' && lat < 50 && lng >= 50 && lng <= 125) continue;
+        var sw = c.bounds_sw;
+        var ne = c.bounds_ne;
+        var minLat = Math.min(sw[0], ne[0]), maxLat = Math.max(sw[0], ne[0]);
+        if (lat < minLat || lat > maxLat) continue;
+
+        var inLng = false;
+        var lngSpan = 0;
+        if (sw[1] <= ne[1]) {
+          inLng = (lng >= sw[1] && lng <= ne[1]);
+          lngSpan = ne[1] - sw[1];
+        } else {
+          // Antimeridian crossing
+          inLng = (lng >= sw[1] || lng <= ne[1]);
+          lngSpan = (180 - sw[1]) + (ne[1] - (-180));
+        }
+
+        if (inLng) {
+          var area = (maxLat - minLat) * lngSpan;
+          candidates.push({ id: id, area: area });
+        }
+      }
+      if (!candidates.length) return null;
+      // 候选重叠时选包围盒面积最小的（如 Hawaii 优于 United States）
+      candidates.sort(function(a, b) { return a.area - b.area; });
+      return candidates[0].id;
+    }
+
+    var _worldPrefillData = null;
+    function loadProposalCountries(cb) {
+      if (_worldPrefillData) {
+        if (cb) cb(_worldPrefillData);
+        return;
+      }
+      fetch('/data/country-prefill.json')
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(data) {
+          _worldPrefillData = data;
+          if (cb) cb(data);
+        })
+        .catch(function() {
+          if (cb) cb({});
+        });
+    }
+    // 页面立即静默预热世界国家数据（不等待 2s，确保落点时数据已就绪）
+    loadProposalCountries();
+
+    // --- 全球高精矢量多边形判定引擎 (Point-in-Polygon) ------------------------
+    var _worldBoundariesData = null;
+    function loadWorldBoundaries(cb) {
+      if (_worldBoundariesData) {
+        if (cb) cb(_worldBoundariesData);
+        return;
+      }
+      fetch('/data/world-boundaries.json')
+        .then(function(r) { return r.ok ? r.json() : []; })
+        .then(function(data) {
+          _worldBoundariesData = data;
+          if (cb) cb(data);
+        })
+        .catch(function() {
+          if (cb) cb([]);
+        });
+    }
+    loadWorldBoundaries();
+
+    function isPointInRing(lat, lng, ring) {
+      var inside = false;
+      for (var i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        var yi = ring[i][0], xi = ring[i][1];
+        var yj = ring[j][0], xj = ring[j][1];
+        var intersect = ((yi > lat) !== (yj > lat)) &&
+          (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+      }
+      return inside;
+    }
+
+    function findCountryFromPolygon(lat, lng, boundaries) {
+      if (!boundaries || !boundaries.length) return null;
+
+      // Hawaii 细分 / 经纬度特别支持 (优先于美国本土)
+      if (lat >= 18 && lat <= 23 && lng >= -161 && lng <= -154) {
+        return { id: 'hawaii', name: 'Hawaii', code: 'us-hi' };
+      }
+
+      for (var i = 0; i < boundaries.length; i++) {
+        var c = boundaries[i];
+        var b = c.bbox;
+        // Stage 1: O(1) 包围盒快速粗筛 (排除 99% 的无关国家)
+        if (lat < b[0] || lat > b[2] || lng < b[1] || lng > b[3]) continue;
+
+        // Stage 2: 射线法多边形判定 (自然处理多岛屿、飞地与内环洞)
+        var insideCount = 0;
+        for (var r = 0; r < c.rings.length; r++) {
+          if (isPointInRing(lat, lng, c.rings[r])) insideCount++;
+        }
+        if (insideCount % 2 === 1) {
+          return { id: c.id, name: c.name, code: c.code };
+        }
+      }
+      return null;
+    }
+
+    function matchWorldCountryFromBounds(lat, lng) {
+      if (!_worldPrefillData) return null;
+      var candidates = [];
+      for (var key in _worldPrefillData) {
+        if (key.charAt(0) === '_') continue;
+        if (key === 'russia' && lat < 50 && lng >= 50 && lng <= 125) continue;
+        var c = _worldPrefillData[key];
+        if (!c.sw || !c.ne) continue;
+        var minLat = Math.min(c.sw[0], c.ne[0]), maxLat = Math.max(c.sw[0], c.ne[0]);
+        if (lat < minLat || lat > maxLat) continue;
+        var minLng = Math.min(c.sw[1], c.ne[1]), maxLng = Math.max(c.sw[1], c.ne[1]);
+        if (lng >= minLng && lng <= maxLng) {
+          var area = (maxLat - minLat) * (maxLng - minLng);
+          candidates.push({ id: key, name: c.name, code: c.flag, area: area });
+        }
+      }
+      if (!candidates.length) return null;
+      candidates.sort(function(a, b) { return a.area - b.area; });
+      return candidates[0];
+    }
+
+    function matchOffline(lat, lng, map) {
+      var activeCid = matchCountryFromBounds(lat, lng, map);
+      var worldMatch = matchWorldCountryFromBounds(lat, lng);
+
+      // 若活跃国家匹配（如南非、加拿大、夏威夷）
+      if (activeCid) {
+        // 若活跃国家是巨型大国（如俄罗斯），而世界国家库匹配到了更具体的国家（如哈萨克斯坦、中国、蒙古等）
+        // 绝不允许大国巨型包围盒吞并邻国
+        if (activeCid === 'russia' && worldMatch && worldMatch.id !== 'russia') {
+          return { activeId: null, unsupported: worldMatch };
+        }
+        // 若命中飞地/微型未收录国家（如南非境内的莱索托等），面积相差15倍以上，未收录国家胜出（进入提案流）
+        if (worldMatch && (!map[worldMatch.id] || !map[worldMatch.id].active)) {
+          var ac = map[activeCid];
+          var activeArea = 999999;
+          if (ac && ac.bounds_sw && ac.bounds_ne) {
+            activeArea = Math.abs(ac.bounds_ne[0] - ac.bounds_sw[0]) * Math.abs(ac.bounds_ne[1] - ac.bounds_sw[1]);
+          }
+          if (activeArea / worldMatch.area > 15) {
+            return { activeId: null, unsupported: worldMatch };
+          }
+        }
+        return { activeId: activeCid, unsupported: null };
+      }
+
+      // 活跃国家未匹配
+      if (worldMatch) {
+        if (map[worldMatch.id] && map[worldMatch.id].active) {
+          return { activeId: worldMatch.id, unsupported: null };
+        }
+        return { activeId: null, unsupported: worldMatch };
+      }
+
+      return { activeId: null, unsupported: null };
+    }
+
+    function resolveCountryFromLatLng(lat, lng, callback) {
+      function withMap(map) {
+        if (!map || Object.keys(map).length === 0) return;
+
+        function handleCountryResult(country) {
+          if (!country) {
+            callback(null, null);
+            return;
+          }
+          var cid = country.id;
+          // 若属于 GeoGuide 已收录且激活的国家 (如 south-africa, canada, hawaii, 等)
+          if (map[cid] && map[cid].active) {
+            callback(cid, null);
+          } else if (cid === 'turkiye' && map['turkey'] && map['turkey'].active) {
+            callback('turkey', null);
+          } else if (cid === 'turkey' && map['turkey'] && map['turkey'].active) {
+            callback('turkey', null);
+          } else {
+            // 属于未收录国家 (如哈萨克斯坦、中国、乌干达、博茨瓦纳) -> 引导提案
+            callback(null, { name: country.name, code: country.code });
+          }
+        }
+
+        // 优先使用高精矢量多边形判定 (纯本地、<1ms、零网络依赖)
+        if (_worldBoundariesData && _worldBoundariesData.length > 0) {
+          var matched = findCountryFromPolygon(lat, lng, _worldBoundariesData);
+          handleCountryResult(matched);
+          return;
+        }
+
+        // 若数据还在加载中，等待载入后即刻判定
+        loadWorldBoundaries(function(data) {
+          if (data && data.length > 0) {
+            var m = findCountryFromPolygon(lat, lng, data);
+            handleCountryResult(m);
+          } else {
+            // 极端兜底 (如静态文件加载失败时，走既有包围盒 matchOffline)
+            var res = matchOffline(lat, lng, map);
+            if (res.activeId && map[res.activeId] && map[res.activeId].active) {
+              callback(res.activeId, null);
+            } else if (res.unsupported && res.unsupported.name) {
+              callback(null, res.unsupported);
+            } else {
+              callback(null, null);
+            }
+          }
+        });
+      }
+
+      if (window._countryMap && Object.keys(window._countryMap).length > 0) {
+        withMap(window._countryMap);
+      } else {
+        window.addEventListener('countries-ready', function(e) {
+          withMap(e.detail || window._countryMap);
+        }, { once: true });
+      }
+    }
+
+    function showCountryToast(msg) {
+      var t = document.getElementById('country-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'country-toast';
+        t.className = 'toast';
+        document.body.appendChild(t);
+      }
+      t.textContent = msg;
+      t.classList.add('toast--visible');
+      clearTimeout(showCountryToast._timer);
+      showCountryToast._timer = setTimeout(function() {
+        t.classList.remove('toast--visible');
+      }, 3500);
+    }
+
+    function showCountryPromptToast(detectedCountry, currentCountry, onConfirm, onKeep) {
+      if (typeof hideTagPromptToast === 'function') hideTagPromptToast();
+      var t = document.getElementById('country-prompt-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'country-prompt-toast';
+        t.className = 'toast toast--action';
+        t.innerHTML = '<span id="country-prompt-text"></span>'
+          + '<div class="toast-actions">'
+          + '<button type="button" class="toast-btn toast-btn--primary" id="country-prompt-change">Change</button>'
+          + '<button type="button" class="toast-btn toast-btn--secondary" id="country-prompt-keep">Keep</button>'
+          + '</div>';
+        document.body.appendChild(t);
+      }
+      var textEl = t.querySelector('#country-prompt-text');
+      var safeDetected = typeof escapeHtml === 'function' ? escapeHtml(detectedCountry.name) : detectedCountry.name;
+      var safeCurrent = typeof escapeHtml === 'function' ? escapeHtml(currentCountry.name) : currentCountry.name;
+      if (textEl) {
+        textEl.innerHTML = 'Point is in <strong>' + safeDetected + '</strong>. Change country from '
+          + safeCurrent + ' to ' + safeDetected + '?';
+      }
+      var changeBtn = t.querySelector('#country-prompt-change');
+      var keepBtn = t.querySelector('#country-prompt-keep');
+
+      changeBtn.textContent = 'Change';
+      changeBtn.onclick = function(e) {
+        e.stopPropagation();
+        hideCountryPromptToast();
+        if (onConfirm) onConfirm();
+      };
+      keepBtn.textContent = 'Keep';
+      keepBtn.onclick = function(e) {
+        e.stopPropagation();
+        hideCountryPromptToast();
+        if (onKeep) onKeep();
+      };
+
+      t.style.display = 'flex';
+      void t.offsetWidth;
+      t.classList.add('toast--visible');
+
+      clearTimeout(showCountryPromptToast._timer);
+      showCountryPromptToast._timer = setTimeout(function() {
+        hideCountryPromptToast();
+      }, 12000);
+    }
+
+    // 玩家选择的位置属于尚未支持的国家，提示玩家 propose
+    function showCountryProposePromptToast(unsupportedCountry) {
+      if (typeof hideTagPromptToast === 'function') hideTagPromptToast();
+      var t = document.getElementById('country-prompt-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'country-prompt-toast';
+        t.className = 'toast toast--action';
+        t.innerHTML = '<span id="country-prompt-text"></span>'
+          + '<div class="toast-actions">'
+          + '<button type="button" class="toast-btn toast-btn--primary" id="country-prompt-change">Propose</button>'
+          + '<button type="button" class="toast-btn toast-btn--secondary" id="country-prompt-keep">Dismiss</button>'
+          + '</div>';
+        document.body.appendChild(t);
+      }
+      var textEl = t.querySelector('#country-prompt-text');
+      var safeName = typeof escapeHtml === 'function' ? escapeHtml(unsupportedCountry.name) : unsupportedCountry.name;
+      if (textEl) {
+        textEl.innerHTML = 'Point is in <strong>' + safeName + '</strong>, which isn’t on GeoGuide yet. Propose this country?';
+      }
+      var changeBtn = t.querySelector('#country-prompt-change');
+      var keepBtn = t.querySelector('#country-prompt-keep');
+
+      changeBtn.textContent = 'Propose ' + safeName;
+      changeBtn.onclick = function(e) {
+        e.stopPropagation();
+        hideCountryPromptToast();
+        openProposalModal(unsupportedCountry.name);
+      };
+      keepBtn.textContent = 'Dismiss';
+      keepBtn.onclick = function(e) {
+        e.stopPropagation();
+        hideCountryPromptToast();
+      };
+
+      t.style.display = 'flex';
+      void t.offsetWidth;
+      t.classList.add('toast--visible');
+
+      clearTimeout(showCountryPromptToast._timer);
+      showCountryPromptToast._timer = setTimeout(function() {
+        hideCountryPromptToast();
+      }, 12000);
+    }
+
+    function hideCountryPromptToast() {
+      var t = document.getElementById('country-prompt-toast');
+      if (t) {
+        t.classList.remove('toast--visible');
+        clearTimeout(showCountryPromptToast._timer);
+        setTimeout(function() {
+          if (!t.classList.contains('toast--visible')) {
+            t.style.display = 'none';
+          }
+        }, 300);
+      }
+    }
+
+    // --- Proposal Modal (一比一完整复刻 index.html) --------------------------
+    var PRC_COUNTRY_LIST = [
+      "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
+      "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi",
+      "Cabo Verde", "Cambodia", "Cameroon", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Cote d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czech Republic",
+      "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic",
+      "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia",
+      "Fiji", "Finland", "France",
+      "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
+      "Haiti", "Honduras", "Hungary",
+      "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy",
+      "Jamaica", "Japan", "Jordan",
+      "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan",
+      "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+      "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar",
+      "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
+      "Oman",
+      "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Peru", "Philippines", "Poland", "Portugal",
+      "Qatar",
+      "Romania", "Russia", "Rwanda",
+      "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
+      "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkmenistan", "Tuvalu",
+      "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "Uruguay", "Uzbekistan",
+      "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
+      "Yemen",
+      "Zambia", "Zimbabwe"
+    ];
+
+    var COUNTRY_NAME_ALIASES = {
+      "Côte d'Ivoire": "Cote d'Ivoire",
+      "Macedonia": "North Macedonia",
+      "Swaziland": "Eswatini",
+      "Democratic Republic of Congo": "Democratic Republic of the Congo",
+      "Republic of Congo": "Congo",
+      "Brunei Darussalam": "Brunei",
+      "Cape Verde": "Cabo Verde"
+    };
+
+    function openProposalModal(preselectName) {
+      var modal = document.getElementById('proposal-modal');
+      var backdrop = document.getElementById('proposal-backdrop');
+      var select = document.getElementById('proposal-country-select');
+      if (!modal || !backdrop || !select) return;
+
+      // Clear any pending close timeout (prevents race with open)
+      clearTimeout(modal._closeTimeout);
+
+      // Populate country dropdown — filter out existing countries
+      select.innerHTML = '<option value="">-- Select a country --</option>';
+      var existingNames = {};
+      if (window._countryMap) {
+        Object.keys(window._countryMap).forEach(function(id) {
+          if (window._countryMap[id] && window._countryMap[id].name) {
+            existingNames[window._countryMap[id].name.toLowerCase()] = true;
+          }
+        });
+      }
+      PRC_COUNTRY_LIST.forEach(function(name) {
+        if (!existingNames[name.toLowerCase()]) {
+          var opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          select.appendChild(opt);
+        }
+      });
+
+      // Bind dimming — set onchange/onfocus directly on the element objects
+      var regionInput = document.getElementById('proposal-region');
+      var regionEl = regionInput ? regionInput.parentElement : null;
+      var countryEl = select.parentElement;
+      select.onclick = function() {
+        if (countryEl) { countryEl.style.opacity = ''; countryEl.style.pointerEvents = ''; }
+        if (regionEl) { regionEl.style.opacity = '0.3'; regionEl.style.pointerEvents = 'none'; }
+      };
+      select.onchange = function() {
+        if (!select.value) { resetDim(); }
+      };
+      select.onblur = function() {
+        if (!select.value) { resetDim(); }
+      };
+      if (regionInput) {
+        regionInput.oninput = function() {
+          if (regionInput.value.trim()) {
+            if (countryEl) { countryEl.style.opacity = '0.3'; countryEl.style.pointerEvents = 'none'; }
+          } else {
+            resetDim();
+          }
+        };
+      }
+      function resetDim() {
+        if (countryEl) { countryEl.style.opacity = ''; countryEl.style.pointerEvents = ''; }
+        if (regionEl) { regionEl.style.opacity = ''; regionEl.style.pointerEvents = ''; }
+      }
+
+      // Reset form
+      if (regionInput) regionInput.value = '';
+      var reasonInput = document.getElementById('proposal-reason');
+      if (reasonInput) reasonInput.value = '';
+      var errorEl = document.getElementById('proposal-error');
+      if (errorEl) { errorEl.style.display = 'none'; errorEl.textContent = ''; }
+      setMetaIntent('provide');
+      resetDim();
+
+      // 点击提示条或外部传入预选国家
+      if (preselectName) {
+        var target = COUNTRY_NAME_ALIASES[preselectName] || preselectName;
+        for (var optIdx = 0; optIdx < select.options.length; optIdx++) {
+          if (select.options[optIdx].value.toLowerCase() === target.toLowerCase()) {
+            select.value = select.options[optIdx].value;
+            if (countryEl) { countryEl.style.opacity = ''; countryEl.style.pointerEvents = ''; }
+            if (regionEl) { regionEl.style.opacity = '0.3'; regionEl.style.pointerEvents = 'none'; }
+            break;
+          }
+        }
+      }
+
+      // Show
+      modal.hidden = false;
+      backdrop.hidden = false;
+      backdrop.removeAttribute('aria-hidden');
+      document.body.style.overflow = 'hidden';
+      requestAnimationFrame(function() {
+        modal.classList.add('is-open');
+        backdrop.classList.add('is-open');
+      });
+    }
+
+    function closeProposalModal() {
+      var modal = document.getElementById('proposal-modal');
+      var backdrop = document.getElementById('proposal-backdrop');
+      if (!modal || !backdrop) return;
+      modal.classList.remove('is-open');
+      backdrop.classList.remove('is-open');
+      modal._closeTimeout = setTimeout(function() {
+        modal.hidden = true;
+        backdrop.hidden = true;
+        backdrop.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+      }, 250);
+    }
+
+    var metaIntent = null;
+    function setMetaIntent(value) {
+      metaIntent = value;
+      document.querySelectorAll('#proposal-meta-toggle .meta-toggle-btn').forEach(function(b) {
+        var on = b.getAttribute('data-value') === value;
+        b.classList.toggle('is-selected', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+
+    function initProposalModal() {
+      document.querySelectorAll('#proposal-meta-toggle .meta-toggle-btn').forEach(function(b) {
+        b.addEventListener('click', function() { setMetaIntent(b.getAttribute('data-value')); });
+      });
+      setMetaIntent('provide');
+
+      var submitBtn = document.getElementById('proposal-submit-btn');
+      if (submitBtn) {
+        submitBtn.addEventListener('click', function() {
+          var countrySelect = document.getElementById('proposal-country-select');
+          var countryVal = countrySelect ? countrySelect.value : '';
+          var regionInput = document.getElementById('proposal-region');
+          var regionVal = regionInput ? regionInput.value.trim() : '';
+          var reasonInput = document.getElementById('proposal-reason');
+          var reasonVal = reasonInput ? reasonInput.value.trim() : '';
+          var errorEl = document.getElementById('proposal-error');
+
+          // Determine which field was filled
+          var proposedName, proposalType;
+          if (countryVal && regionVal) {
+            if (errorEl) {
+              errorEl.textContent = 'Please fill in either Country or Region, not both.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+          if (countryVal) {
+            proposedName = countryVal;
+            proposalType = 'country';
+          } else if (regionVal) {
+            proposedName = regionVal;
+            proposalType = 'region';
+          } else {
+            if (errorEl) {
+              errorEl.textContent = 'Please select a country or enter a region name.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+
+          if (proposalType === 'region' && proposedName.length > 20) {
+            if (errorEl) {
+              errorEl.textContent = 'Region name must be 20 characters or fewer.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+          if (proposedName.length < 2) {
+            if (errorEl) {
+              errorEl.textContent = 'Name must be at least 2 characters.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+          if (reasonVal.length > 60) {
+            if (errorEl) {
+              errorEl.textContent = 'Reason must be 60 characters or fewer.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+          if (!metaIntent) {
+            if (errorEl) {
+              errorEl.textContent = 'Please choose whether you want to provide or learn meta.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+
+          if (!window._user) {
+            if (errorEl) {
+              errorEl.innerHTML = 'Please <a href="/api/auth?action=login" style="color:var(--soil-dark);text-decoration:underline;">login with Discord</a> to submit proposals.';
+              errorEl.style.display = 'block';
+            }
+            return;
+          }
+
+          var origText = submitBtn.textContent;
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Submitting...';
+
+          var postPromise = fetch('/api/user-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+            body: JSON.stringify({ action: 'propose-country', proposed_name: proposedName, proposal_type: proposalType, reason: reasonVal, meta_intent: metaIntent })
+          })
+          .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+          .then(function(result) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = origText;
+            if (result.data.error) {
+              if (errorEl) {
+                errorEl.textContent = result.data.error;
+                errorEl.style.display = 'block';
+              }
+              return;
+            }
+            // Success
+            closeProposalModal();
+            showCountryToast('Proposal for ' + proposedName + ' submitted! Thanks for your suggestion.');
+          })
+          .catch(function() {
+            submitBtn.disabled = false;
+            submitBtn.textContent = origText;
+            if (errorEl) {
+              errorEl.textContent = 'Network error. Please try again.';
+              errorEl.style.display = 'block';
+            }
+          });
+
+          if (typeof disableWhile === 'function') {
+            disableWhile(submitBtn, 'Submitting...', postPromise);
+          }
+        });
+      }
+
+      // Close handlers
+      var closeBtn = document.getElementById('proposal-modal-close');
+      if (closeBtn) closeBtn.addEventListener('click', closeProposalModal);
+      var cancelBtn = document.getElementById('proposal-cancel-btn');
+      if (cancelBtn) cancelBtn.addEventListener('click', closeProposalModal);
+      var backdrop = document.getElementById('proposal-backdrop');
+      if (backdrop) backdrop.addEventListener('click', function(e) {
+        if (e.target === e.currentTarget) closeProposalModal();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && !document.getElementById('proposal-modal').hidden) {
+          closeProposalModal();
+        }
+      });
+    }
+    initProposalModal();
+
+    function handleFirstPointCountry(latlng) {
+      if (typeof currentScope !== 'undefined' && currentScope === 'country') return;
+      if (!latlng || typeof latlng.lat !== 'number' || typeof latlng.lng !== 'number') return;
+
+      resolveCountryFromLatLng(latlng.lat, latlng.lng, function(detectedId, unsupportedCountry) {
+        var map = window._countryMap;
+        var select = document.getElementById('region-country');
+        if (!select || !map) return;
+
+        // 如果玩家选择的位置属于尚未支持的国家，提示玩家 propose
+        if (unsupportedCountry && unsupportedCountry.name) {
+          showCountryProposePromptToast(unsupportedCountry);
+          return;
+        }
+
+        if (!detectedId || !map[detectedId]) return;
+
+        var detectedCountry = map[detectedId];
+        var currentId = select.value;
+
+        // Case 1: 玩家已选国家且与解析国家一致 → 不做任何事
+        if (currentId && currentId === detectedId) {
+          return;
+        }
+
+        // Case 2: 玩家已选国家但与解析国家不一致 → 提示玩家是否更改，但不自动改
+        if (currentId && currentId !== detectedId) {
+          var currentCountry = map[currentId] || { name: currentId };
+          showCountryPromptToast(detectedCountry, currentCountry, function() {
+            select.value = detectedId;
+            select.dispatchEvent(new Event('change', { bubbles: true }));
+            select.dispatchEvent(new Event('input', { bubbles: true }));
+            showCountryToast('Country changed to ' + detectedCountry.name);
+          }, function() {
+            // Keep: do nothing
+          });
+          return;
+        }
+
+        // Case 3: 玩家未选择国家 → 直接帮他预填，但弹窗告知
+        if (!currentId) {
+          select.value = detectedId;
+          select.dispatchEvent(new Event('change', { bubbles: true }));
+          select.dispatchEvent(new Event('input', { bubbles: true }));
+          showCountryToast('Auto-selected ' + detectedCountry.name + ' based on map location');
+        }
+      });
+    }
+
+    // 监听国家下拉框手动改动，及时收起 prompt toast
+    var countrySelectEl = document.getElementById('region-country');
+    if (countrySelectEl) {
+      countrySelectEl.addEventListener('change', function() {
+        hideCountryPromptToast();
+        if (countrySelectEl.value === '__propose__') {
+          countrySelectEl.value = '';
+          openProposalModal();
+        }
+      });
+    }
+    var proposeCountryLink = document.getElementById('propose-country-link');
+    if (proposeCountryLink) {
+      proposeCountryLink.addEventListener('click', function(e) {
+        e.preventDefault();
+        openProposalModal();
+      });
+    }
+
+    map.on('pm:drawstart', function(e) {
+      if (!e) return;
+      // Line 与 Polygon：在第一个顶点放置时解析国家，后续顶点不重复触发
+      if (e.workingLayer && (e.shape === 'Line' || e.shape === 'Polygon')) {
+        var isFirstVertex = true;
+        e.workingLayer.on('pm:vertexadded', function(ve) {
+          if (isFirstVertex) {
+            isFirstVertex = false;
+            var pt = ve.latlng || (ve.marker && ve.marker.getLatLng && ve.marker.getLatLng());
+            if (pt) handleFirstPointCountry(pt);
+          }
+        });
+      }
+      if (e.shape !== 'Line') return;
+      map.pm.Draw.Line._truncateUndo = [];   // 每个绘制会话独立的撤销栈
+      cleanupTrimUI();                       // 清理上一个会话残留的命中层/高亮
+      refreshLineActions();
+      var wl = e.workingLayer;
+      if (!wl || !wl.on) return;
+      // 把正在画的实线提到虚线(hintline)之上，让点击命中实线而非被虚线拦截
+      try { if (wl.bringToFront) { wl.bringToFront(); } } catch (err) {}
+
+      // 工作线坐标变化（加顶点/截断/撤销）时同步透明命中层
+      wl.on('pm:change', function() {
+        syncTrimHitPath(wl.getLatLngs ? wl.getLatLngs() : []);
+      });
+
+      // 透明加宽命中层：把"点击线上"的有效命中范围从 3px 放大到 ±12px，并承载悬浮反馈
+      syncTrimHitPath(wl.getLatLngs ? wl.getLatLngs() : []);
+
+      // —— 命中层事件：悬浮高亮 + 点击截断（真正接住绝大多数点击的层）——
+      trimHitPath.on('mousemove', function(me) {
+        var draw = map.pm.Draw.Line;
+        if (!draw || !draw.enabled || !draw.enabled() || !me || !me.latlng) { clearTrimHover(); return; }
+        var hit = hitTestTrim(draw, me.latlng);
+        if (hit) {
+          showTrimTail(draw._layer.getLatLngs().slice(hit.idx + 1));  // 截断点之后的整段 → 红色虚线
+          setTrimCursor(true);
+          setTrimTooltip(TRIM_TOOLTIP);
+        } else {
+          clearTrimHover();
+        }
+      });
+      trimHitPath.on('mouseout', function() { clearTrimHover(); });
+      trimHitPath.on('click', function(ce) {
+        var draw = map.pm.Draw.Line;
+        if (!draw || !draw.enabled || !draw.enabled() || !ce || !ce.latlng) return;
+        var hit = hitTestTrim(draw, ce.latlng);
+        if (hit && cutLineAt(draw, hit.idx)) {
+          // 阻止事件传给 map，避免 _createVertex 在同位置加顶点/结束绘制
+          L.DomEvent.stop(ce);
+        }
+        // 未命中/截断失败 → 不拦截，走 Geoman 默认行为
+      });
+
+      // 点击实线上的任意点 → 截断到最近顶点/线段起点（命中层失效时的兜底）
+      wl.on('click', function(ce) {
+        var draw = map.pm.Draw.Line;
+        if (!draw || !draw.enabled || !draw.enabled() || !ce || !ce.latlng) return;
+        var hit = hitTestTrim(draw, ce.latlng);
+        if (hit && cutLineAt(draw, hit.idx)) {
+          // 截断成功：阻止事件传给 map，避免 _createVertex 在同位置加顶点/结束绘制。
+          // 注意必须传 Leaflet 事件(ce)而不是 ce.originalEvent：stopPropagation 只在
+          // 收到带 .originalEvent 的 Leaflet 事件时才置 originalEvent._stopped，
+          // 传 DOM 事件只调 DOM 的 stopPropagation，_fireDOMEvent 的 _stopped 检查不生效。
+          L.DomEvent.stop(ce);
+        }
+        // 截断失败（点击首/末点附近）→ 不拦截，走 Geoman 默认行为
+      });
+
+      wl.on('pm:vertexadded', function(ve) {
+        var marker = ve.marker;
+        if (!marker || !marker.on) return;
+        // 阻止点击冒泡到 map（否则 map 的 click 会在同位置再加一个顶点）
+        marker.options.bubblingMouseEvents = false;
+        // 去掉 Geoman 给顶点绑的 click→_finishShape（点任意顶点=结束），换成我们的判定
+        marker.off('click');
+        marker.on('click', function() {
+          var draw = map.pm.Draw.Line;
+          if (!draw || !draw.enabled || !draw.enabled()) return;
+          if (!cutLineAt(draw, draw._markers.indexOf(marker))) {
+            // 首点 / 末点 / 不足 3 个点（没有中间顶点）→ 保持原行为：结束绘制
+            draw._finishShape();
+          }
+        });
+      });
+    });
+
+    // Line 绘制会话结束（Finish / Cancel / 切换工具）→ 清理命中层与悬浮高亮
+    map.on('pm:drawend', function(e) {
+      cleanupTrimUI();
+    });
+
+    // Ctrl+Z / ⌘Z 撤销最近一次截断（仅在绘制态且有撤销记录时；输入框内不拦截）
+    document.addEventListener('keydown', function(ev) {
+      if (!(ev.ctrlKey || ev.metaKey) || (ev.key !== 'z' && ev.key !== 'Z')) return;
+      var t = ev.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      var draw = map.pm.Draw.Line;
+      if (!draw || !draw.enabled || !draw.enabled()) return;
+      if (!truncateUndoStack().length) return;
+      ev.preventDefault();
+      undoLastTruncate();
+    });
+
+    var drawnLayers = [];       // Array of L.Layer (polygons & polylines)
+    var arrowStates = new Map(); // Map<L.Layer, {showArrow: boolean, decorator: L.polylineDecorator|null}>
+    var MAX_SHAPES = 10;
+
+    // Centralized shape removal — all deletion paths go through here
+    function removeShape(layer) {
+      // 1. Clean up arrow decorator + zoom listener
+      var st = arrowStates.get(layer);
+      if (st && st.decorator) {
+        if (st.decorator._onZoom) { map.off('zoomend', st.decorator._onZoom); }
+        map.removeLayer(st.decorator);
+      }
+      arrowStates.delete(layer);
+
+      // 2. Flag layer so pm:remove doesn't double-fire
+      layer._removing = true;
+
+      // 3. Remove from map — triggers pm:remove (which now guards on _removing)
+      map.removeLayer(layer);
+
+      // 4. Remove from drawnLayers (compute index fresh — not from closure)
+      var idx = drawnLayers.indexOf(layer);
+      if (idx > -1) drawnLayers.splice(idx, 1);
+
+      // 5. Refresh sidebar
+      renderShapeList();
+
+      // 6. 删除后无需强制重进绘制模式（continueDrawing 会在同工具绘制时保持）；
+      //    不得用无参 map.pm.enableDraw()——它默认切到 Polygon，会把工具栏按钮劫持到多边形。
+    }
+
+    map.on('pm:create', function(e) {
+      if (drawnLayers.length >= MAX_SHAPES) {
+        // Should not happen (controls disabled), but guard anyway
+        map.removeLayer(e.layer);
+        return;
+      }
+
+      var layer = e.layer;
+      drawnLayers.push(layer);
+      layer.addTo(map);
+
+      // Init arrow state for polyline layers
+      var isLine = layer instanceof L.Polyline && !(layer instanceof L.Polygon);
+      arrowStates.set(layer, { showArrow: false, decorator: null });
+
+      renderShapeList();
+
+      // Marker 单点放置触发自动解析预填国家
+      if (e.shape === 'Marker' && layer && layer.getLatLng) {
+        handleFirstPointCountry(layer.getLatLng());
+      }
+
+      // Disable drawing when at limit
+      if (drawnLayers.length >= MAX_SHAPES) {
+        map.pm.disableDraw();
+      }
+    });
+    map.on('pm:remove', function(e) {
+      if (e.layer._removing) return;  // Already handled by removeShape()
+      removeShape(e.layer);
+    });
+
+    // Insert shape list before form-submit
+    var shapeListDiv = document.createElement('div');
+    shapeListDiv.id = 'shape-list';
+    shapeListDiv.className = 'shape-list';
+    shapeListDiv.style.display = 'none';
+    shapeListDiv.innerHTML = '<div class="shape-list__header"><span>Shapes (<span id="shape-count">0</span>/' + MAX_SHAPES + ')</span>'
+      + '<button id="batch-arrow-btn" class="shape-list__batch-arrow" style="display:none;" title="Toggle arrows on all lines">Arrows</button>'
+      + '</div>'
+      + '<div id="shape-list-items" class="shape-list__items"></div>';
+    document.querySelector('.submit-layout__form').insertBefore(
+      shapeListDiv,
+      document.querySelector('.form-submit')
+    );
+
+    // ---- 提交范围（region / country）----------------------------------------------------
+    // country 模式下不绘制任何几何。类挂在 #submit-form 上，CSS 会把形状层、Geoman 工具条、
+    // 复用按钮、手机端警告一并收起；**drawnLayers 一个都不删** —— 用户画了半天的东西不该被
+    // 一次误触销毁，切回 region 时摘掉 class 即原样复原。形状列表有内联 display，CSS 压不过，
+    // 所以它自己认 currentScope（见 renderShapeList）。
+    var currentScope = 'region';   // var 提升：若 renderShapeList 早于本块被调到会读到 undefined，
+                                   // 而 undefined !== 'country'，正好落回默认行为。
+    var SCOPE_COPY = {
+      region: {
+        nameLabel: 'Region Name',
+        namePlaceholder: 'e.g. Cape Town Table Mountains',
+        hint: 'Draw the area this guide applies to — polygon, line, or point.'
+      },
+      country: {
+        nameLabel: 'Name',
+        namePlaceholder: 'e.g. Japan — bollards & poles',
+        hint: 'A country-wide guide covers the whole country — no drawing needed.'
+      }
+    };
+
+    function setScope(mode) {
+      currentScope = (mode === 'country') ? 'country' : 'region';
+      var isCountry = currentScope === 'country';
+
+      document.querySelectorAll('.scope-choice__opt').forEach(function(opt) {
+        var input = opt.querySelector('input');
+        opt.classList.toggle('is-selected', !!input && input.value === currentScope);
+      });
+
+      var copy = SCOPE_COPY[currentScope];
+      var nameLabel = document.getElementById('region-name-label');
+      if (nameLabel) nameLabel.textContent = copy.nameLabel;
+      var nameInput = document.getElementById('region-name');
+      if (nameInput) nameInput.placeholder = copy.namePlaceholder;
+      var hint = document.getElementById('scope-hint');
+      if (hint) hint.textContent = copy.hint;
+
+      var form = document.getElementById('submit-form');
+      if (form) form.classList.toggle('is-country-scope', isCountry);
+
+      var note = document.getElementById('submit-map-note');
+      if (note) {
+        note.hidden = !isCountry;
+        if (isCountry) {
+          note.textContent = drawnLayers.length > 0
+            ? 'No drawing needed for a country-wide guide — your drawing is kept, but won’t be submitted.'
+            : 'No drawing needed for a country-wide guide.';
+        }
+      }
+
+      if (isCountry && map.pm && map.pm.disableDraw) map.pm.disableDraw();
+      renderShapeList();   // 认 currentScope，country 下把自己也藏掉
+    }
+
+    document.querySelectorAll('.scope-choice__opt input').forEach(function(input) {
+      input.addEventListener('change', function() { setScope(input.value); });
+    });
+    setScope('region');
+
+    // Arrow state helpers (per-layer)
+
+    // ownerLayer: the outer FeatureGroup keyed in arrowStates (may be same as layer)
+    function createArrowDecorator(layer, ownerLayer) {
+      if (typeof L.polylineDecorator === 'undefined') return null;
+      var owner = ownerLayer || layer;
+
+      // Flatten LatLngs (handles LineString, MultiLineString, and L.LatLng objects)
+      function walk(arr, out) {
+        if (!arr) return;
+        if (arr.lat !== undefined && arr.lng !== undefined) { out.push(arr); return; }
+        if (!arr.length) return;
+        if (typeof arr[0] === 'number') { out.push(arr); return; }
+        for (var i = 0; i < arr.length; i++) walk(arr[i], out);
+      }
+
+      function linePixelLen() {
+        var pts = []; walk(layer.getLatLngs(), pts);
+        if (pts.length < 2) return 0;
+        var total = 0;
+        for (var i = 1; i < pts.length; i++) {
+          var a = map.latLngToContainerPoint(pts[i - 1]);
+          var b = map.latLngToContainerPoint(pts[i]);
+          total += Math.sqrt(Math.pow(b.x - a.x, 2) + Math.pow(b.y - a.y, 2));
+        }
+        return total;
+      }
+
+      function makePattern() {
+        var len = linePixelLen();
+        var lw = computeLineWeight(map);
+        var px = Math.max(5, Math.min(20, Math.round(lw * 2)));
+        var sym = L.Symbol.arrowHead({ pixelSize: px, polygon: false, pathOptions: { color: '#3388ff', weight: 3 } });
+        var repeatPx = Math.max(100, Math.min(450, Math.round(Math.max(len, 0) / 1.8)));
+        var offsetPx;
+        if (len < 3) {
+          offsetPx = 0;
+        } else if (len < repeatPx) {
+          offsetPx = Math.round(len / 2);
+        } else {
+          offsetPx = Math.round(repeatPx / 3);
+        }
+        return [{ offset: offsetPx, repeat: repeatPx, symbol: sym }];
+      }
+
+      var decorator = L.polylineDecorator(layer, {
+        patterns: makePattern()
+      }).addTo(map);
+
+      // Recreate on zoom so pixelSize stays correct
+      var onZoom = function() {
+        try {
+          if (decorator) map.removeLayer(decorator);
+          decorator = L.polylineDecorator(layer, {
+            patterns: makePattern()
+          }).addTo(map);
+          decorator._onZoom = onZoom;
+          // Update the stored reference using the owner (outer) layer
+          var state = arrowStates.get(owner);
+          if (state) state.decorator = decorator;
+        } catch(e) {}
+      };
+      map.on('zoomend', onZoom);
+      decorator._onZoom = onZoom;
+
+      return decorator;
+    }
+
+    function rebuildArrowForLayer(layer) {
+      var state = arrowStates.get(layer);
+      if (!state) return;
+      if (state.decorator) {
+        if (state.decorator._onZoom) { map.off('zoomend', state.decorator._onZoom); }
+        map.removeLayer(state.decorator);
+        state.decorator = null;
+      }
+      if (state.showArrow) {
+        // L.geoJSON wraps lines in FeatureGroups — extract the inner polyline
+        var poly = layer;
+        if (layer.getLayers) {
+          layer.eachLayer(function(l) {
+            if (l instanceof L.Polyline && !(l instanceof L.Polygon)) { poly = l; }
+          });
+        }
+        state.decorator = createArrowDecorator(poly, layer);
+      }
+    }
+
+    // Batch arrow toggle for all lines
+    document.getElementById('batch-arrow-btn').addEventListener('click', function() {
+      // Determine action: if all lines already have arrows, turn off; otherwise turn on
+      var allOn = true;
+      arrowStates.forEach(function(state, layer) {
+        if (state.showArrow !== true) allOn = false;
+      });
+      arrowStates.forEach(function(state, layer) {
+        state.showArrow = !allOn;
+        rebuildArrowForLayer(layer);
+      });
+      renderShapeList();
+    });
+
+    function renderShapeList() {
+      var container = document.getElementById('shape-list');
+      var itemsDiv = document.getElementById('shape-list-items');
+      var countSpan = document.getElementById('shape-count');
+      var batchBtn = document.getElementById('batch-arrow-btn');
+      if (!container || !itemsDiv) return;
+
+      // country 范围下不显示形状列表 —— 那些形状不会被提交，列出来只会误导。
+      // 用内联 display 而不是 CSS：这里每次都重设，样式表压不过内联。
+      container.style.display = (drawnLayers.length > 0 && currentScope !== 'country') ? 'block' : 'none';
+      countSpan.textContent = drawnLayers.length;
+      itemsDiv.innerHTML = '';
+
+      // Count lines for batch button visibility
+      var lineCount = 0;
+      drawnLayers.forEach(function(layer) {
+        var isLine = (layer instanceof L.Polyline && !(layer instanceof L.Polygon))
+          || (layer.getLayers && layer.getLayers().some(function(l) { return l instanceof L.Polyline && !(l instanceof L.Polygon); }));
+        if (isLine) lineCount++;
+      });
+      if (batchBtn) batchBtn.style.display = lineCount > 0 ? '' : 'none';
+
+      drawnLayers.forEach(function(layer, idx) {
+        var isLine = (layer instanceof L.Polyline && !(layer instanceof L.Polygon))
+          || (layer.getLayers && layer.getLayers().some(function(l) { return l instanceof L.Polyline && !(l instanceof L.Polygon); }));
+        var isPoint = (layer instanceof L.Marker)
+          || (layer.getLayers && layer.getLayers().some(function(l) { return l instanceof L.Marker; }));
+        var iconCls = isPoint ? 'shape-list__icon--point' : (isLine ? 'shape-list__icon--line' : 'shape-list__icon--poly');
+        var label = (isPoint ? 'Point ' : (isLine ? 'Line ' : 'Polygon ')) + (idx + 1);
+        var state = arrowStates.get(layer);
+        var hasArrow = state && state.showArrow;
+
+        var row = document.createElement('div');
+        row.className = 'shape-list__item';
+
+        var rowHTML = '<span class="shape-list__icon ' + iconCls + '"></span>'
+          + '<span class="shape-list__label">' + label + '</span>';
+        if (isLine) {
+          rowHTML += '<label class="shape-list__arrow-cb" title="Show direction arrows">'
+            + '<input type="checkbox" class="shape-arrow-check"' + (hasArrow ? ' checked' : '') + ' /> ↗</label>';
+          rowHTML += '<button class="shape-list__reverse" title="Reverse direction">↔</button>';
+        }
+        rowHTML += '<button class="shape-list__delete" title="Delete this shape">&times;</button>';
+        row.innerHTML = rowHTML;
+
+        // Click row → pan to this shape
+        row.addEventListener('click', function(e) {
+          if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'LABEL') return;
+          try {
+            map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+          } catch(er) { /* bounds error */ }
+          // Flash highlight this layer
+          if (isPoint) {
+            var pt = layer;
+            if (layer.getLayers) {
+              layer.eachLayer(function(l) { if (l instanceof L.Marker) pt = l; });
+            }
+            pt.setOpacity(0.5);
+            setTimeout(function() { pt.setOpacity(1); }, 300);
+          } else {
+            layer.setStyle({ opacity: 0.5 });
+            setTimeout(function() { layer.setStyle({ opacity: 1 }); }, 300);
+          }
+        });
+
+        // Per-line arrow checkbox — immediate visual feedback
+        if (isLine) {
+          row.querySelector('.shape-arrow-check').addEventListener('change', function() {
+            var st = arrowStates.get(layer);
+            if (!st) return;
+            st.showArrow = this.checked;
+            rebuildArrowForLayer(layer);
+            renderShapeList();
+          });
+        }
+
+        // Reverse button
+        if (isLine) {
+          row.querySelector('.shape-list__reverse').addEventListener('click', function(e) {
+            e.stopPropagation();
+            // Extract inner polyline
+            var poly = layer;
+            if (layer.getLayers) {
+              layer.eachLayer(function(l) {
+                if (l instanceof L.Polyline && !(l instanceof L.Polygon)) { poly = l; }
+              });
+            }
+            // Reverse coordinate order
+            var latlngs = poly.getLatLngs();
+            if (latlngs && latlngs.length > 1) {
+              poly.setLatLngs(latlngs.slice().reverse());
+              // Rebuild arrow if currently shown
+              var st = arrowStates.get(layer);
+              if (st && st.showArrow) rebuildArrowForLayer(layer);
+            }
+          });
+        }
+
+        // Delete button
+        row.querySelector('.shape-list__delete').addEventListener('click', function(e) {
+          e.stopPropagation();
+          removeShape(layer);
+        });
+
+        itemsDiv.appendChild(row);
+      });
+
+      // Manage draw control state
+      // 关键：不要用无参 map.pm.enableDraw()（Geoman 默认 shape = 'Polygon'，
+      // 会在每次画完形状后把工具栏劫持成 polygon 按钮）。达到上限时仅退出绘制态；
+      // 未达上限时让 continueDrawing 保持当前工具的按钮即可。
+      if (drawnLayers.length >= MAX_SHAPES) {
+        map.pm.disableDraw();
+      }
+    }
+
+    // Shared helper: replace the editor's current shapes with a set of GeoJSON
+    // geometry objects (used by "reuse last geometry" and file import).
+    function loadGeometriesIntoEditor(geometries) {
+      // Remove any existing shapes first (clean removal via removeShape)
+      drawnLayers.slice().forEach(function(layer) { removeShape(layer); });
+      drawnLayers = [];
+      arrowStates.clear();
+
+      geometries.forEach(function(geom) {
+        if (!geom || !geom.type) return;
+        var layer = L.geoJSON(geom, { pmIgnore: false }).addTo(map);
+        if (layer.pm) { layer.pm.enable(); }
+        drawnLayers.push(layer);
+
+        var isLine = geom.type === 'LineString';
+        var hasArrow = isLine && (geom.arrow === true || (geom.properties && geom.properties.arrow === true));
+        arrowStates.set(layer, { showArrow: hasArrow, decorator: null });
+
+        if (hasArrow) {
+          layer.eachLayer(function(l) {
+            if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+              var state = arrowStates.get(layer);
+              state.decorator = createArrowDecorator(l, layer);
+            }
+          });
+        }
+      });
+
+      renderShapeList();
+
+      if (drawnLayers.length > 0) {
+        try {
+          var b = drawnLayers[0].getBounds();
+          for (var i = 1; i < drawnLayers.length; i++) b.extend(drawnLayers[i].getBounds());
+          map.fitBounds(b, { padding: [30, 30] });
+        } catch(e) {}
+      }
+    }
+
+    // Parse an imported GeoJSON/KML file into a normalized geometry array.
+    function importFileToGeometries(text, ext) {
+      var fc = null;
+      if (ext === 'kml' || text.trim().indexOf('<kml') === 0) {
+        var doc = new DOMParser().parseFromString(text, 'text/xml');
+        if (doc.getElementsByTagName('parsererror').length) throw new Error('Could not parse KML');
+        if (typeof toGeoJSON === 'undefined' || !toGeoJSON.kml) throw new Error('KML parser library not loaded');
+        fc = toGeoJSON.kml(doc);
+      } else {
+        var obj = JSON.parse(text);
+        if (obj.type === 'FeatureCollection') fc = obj;
+        else if (obj.type === 'Feature') fc = { type: 'FeatureCollection', features: [obj] };
+        else if (obj.type && obj.coordinates) fc = { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: obj }] };
+        else if (Array.isArray(obj)) return { geometries: obj.filter(function(g){ return g && g.type; }), skipped: 0, firstName: null, firstDescription: null };
+        else throw new Error('Not a valid GeoJSON file');
+      }
+      var features = fc.features || [];
+      var geoms = [];
+      var points = [];
+      var skipped = 0;
+      var firstName = null, firstDescription = null;
+      features.forEach(function(f, i) {
+        var g = f && f.geometry;
+        if (!g) { skipped++; return; }
+        var props = (f && f.properties) || {};
+        if (i === 0) {
+          firstName = props.name || null;
+          firstDescription = props.description || null;
+        }
+        if (g.type === 'MultiPolygon') {
+          g.coordinates.forEach(function(poly) {
+            geoms.push({ type: 'Polygon', coordinates: poly });
+          });
+        } else if (g.type === 'Point') {
+          points.push(g);
+        } else if (g.type === 'LineString' || g.type === 'Polygon') {
+          geoms.push(g);
+        } else {
+          skipped++;
+        }
+      });
+      // Mixed files: Point features are route markers / waypoints, not content —
+      // skip them and report the count. Pure-Point files still import as-is.
+      var markerPoints = geoms.length > 0 ? points.length : 0;
+      if (geoms.length === 0) geoms = points;
+      return { geometries: geoms, skipped: skipped, markerPoints: markerPoints, firstName: firstName, firstDescription: firstDescription };
+    }
+
+    // Count every leaf [lng, lat] pair in a GeoJSON coordinates tree.
+    function countPoints(coords) {
+      if (!Array.isArray(coords)) return 0;
+      if (typeof coords[0] === 'number') return 1; // a leaf coordinate pair
+      var n = 0;
+      for (var i = 0; i < coords.length; i++) n += countPoints(coords[i]);
+      return n;
+    }
+    function totalPoints(geometries) {
+      var n = 0;
+      for (var i = 0; i < geometries.length; i++) {
+        if (geometries[i] && geometries[i].coordinates) n += countPoints(geometries[i].coordinates);
+      }
+      return n;
+    }
+
+    // Squared perpendicular distance from point p to segment ab (Douglas–Peucker).
+    function sqSegDist(p, a, b) {
+      var x = a[0], y = a[1], dx = b[0] - x, dy = b[1] - y;
+      if (dx !== 0 || dy !== 0) {
+        var t = ((p[0] - x) * dx + (p[1] - y) * dy) / (dx * dx + dy * dy);
+        if (t > 1) { x = b[0]; y = b[1]; }
+        else if (t > 0) { x += dx * t; y += dy * t; }
+      }
+      dx = p[0] - x; dy = p[1] - y;
+      return dx * dx + dy * dy;
+    }
+    function simplifyCoords(pts, tolerance) { // Douglas–Peucker, iterative stack
+      if (!pts || pts.length < 3) return pts || [];
+      var sqTol = tolerance * tolerance;
+      var keep = new Uint8Array(pts.length);
+      keep[0] = keep[pts.length - 1] = 1;
+      var stack = [[0, pts.length - 1]];
+      while (stack.length) {
+        var seg = stack.pop(), a = seg[0], b = seg[1];
+        var maxSq = 0, idx = -1;
+        for (var i = a + 1; i < b; i++) {
+          var d = sqSegDist(pts[i], pts[a], pts[b]);
+          if (d > maxSq) { maxSq = d; idx = i; }
+        }
+        if (maxSq > sqTol && idx > -1) {
+          keep[idx] = 1;
+          stack.push([a, idx], [idx, b]);
+        }
+      }
+      var out = [];
+      for (var j = 0; j < pts.length; j++) if (keep[j]) out.push(pts[j]);
+      return out;
+    }
+    function simplifyGeometry(g, tol) { // recurse Multi*; LineString->1 line; Polygon->each ring
+      if (!g || !g.coordinates) return g;
+      if (g.type === 'LineString') {
+        g.coordinates = simplifyCoords(g.coordinates, tol);
+      } else if (g.type === 'MultiLineString') {
+        g.coordinates = g.coordinates.map(function (line) { return simplifyCoords(line, tol); });
+      } else if (g.type === 'Polygon') {
+        g.coordinates = g.coordinates.map(function (ring) { return simplifyCoords(ring, tol); });
+      } else if (g.type === 'MultiPolygon') {
+        g.coordinates = g.coordinates.map(function (poly) {
+          return poly.map(function (ring) { return simplifyCoords(ring, tol); });
+        });
+      }
+      return g;
+    }
+    var MAX_POINTS = 3000;
+
+    // Populate country select from /api/countries
+    (function() {
+      function populateCountries() {
+        var map = window._countryMap;
+        var select = document.getElementById('region-country');
+        if (!select) return;
+
+        if (!map || Object.keys(map).length === 0) {
+          // Wait for countries to load
+          window.addEventListener('countries-ready', function() {
+            populateCountries();
+          }, { once: true });
+          return;
+        }
+
+        // 按国家/区域名称首字母排序（仅保留 active 的）
+        var ids = Object.keys(map).filter(function(id) {
+          return map[id].active;
+        }).sort(function(a, b) {
+          return (map[a].name || '').localeCompare(map[b].name || '');
+        });
+
+        ids.forEach(function(id) {
+          var c = map[id];
+          var opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = c.name;
+          select.appendChild(opt);
+        });
+
+        // 底部追加提案选项
+        var proposeOpt = document.createElement('option');
+        proposeOpt.value = '__propose__';
+        proposeOpt.textContent = '+ Don’t see your country? Propose it...';
+        select.appendChild(proposeOpt);
+
+        // ?country= 预选 —— 提交页第一次支持国家预选，落点是 explore 上「这个国家还没有
+        // meta，来写一个」那条鼓励链接。只在选择框还空着时生效，所以编辑态（?edit= 的
+        // 预填会先把值设好）不会被它顶掉。
+        if (!select.value) {
+          var wanted = new URLSearchParams(window.location.search).get('country');
+          if (wanted && ids.indexOf(wanted) !== -1) select.value = wanted;
+        }
+      }
+      populateCountries();
+    })();
+
+    // Tag selector logic
+    var selectedTags = [];
+    var proposedTags = []; // { name, category }
+    var _tagIndex = null;
+    var _userDeselectedTags = {};
+    var _titleMatchedTags = {};
+    var _autoTagTimer = null;
+
+    function showTagToast(msg) {
+      var t = document.getElementById('tag-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'tag-toast';
+        t.className = 'toast';
+        document.body.appendChild(t);
+      }
+      t.textContent = msg;
+      var promptEl = document.getElementById('tag-prompt-toast');
+      if (promptEl && promptEl.classList.contains('toast--visible')) {
+        t.style.bottom = '80px';
+      } else {
+        t.style.bottom = '';
+      }
+      t.classList.add('toast--visible');
+      clearTimeout(showTagToast._timer);
+      showTagToast._timer = setTimeout(function() {
+        t.classList.remove('toast--visible');
+      }, 3500);
+    }
+
+    function hideTagPromptToast() {
+      var t = document.getElementById('tag-prompt-toast');
+      if (t) {
+        t.classList.remove('toast--visible');
+        clearTimeout(showTagRemovePromptToast._timer);
+        setTimeout(function() {
+          if (!t.classList.contains('toast--visible')) {
+            t.style.display = 'none';
+          }
+        }, 300);
+      }
+    }
+
+    function showTagRemovePromptToast(tagsToRemove, onRemove, onKeep) {
+      if (typeof hideCountryPromptToast === 'function') hideCountryPromptToast();
+      var t = document.getElementById('tag-prompt-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'tag-prompt-toast';
+        t.className = 'toast toast--action';
+        t.innerHTML = '<span id="tag-prompt-text"></span>'
+          + '<div class="toast-actions">'
+          + '<button type="button" class="toast-btn toast-btn--primary" id="tag-prompt-remove">Remove</button>'
+          + '<button type="button" class="toast-btn toast-btn--secondary" id="tag-prompt-keep">Keep</button>'
+          + '</div>';
+        document.body.appendChild(t);
+      }
+      var textEl = t.querySelector('#tag-prompt-text');
+      var safeNames = (tagsToRemove || []).map(function(item) {
+        var n = typeof item === 'string' ? item : item.name;
+        return typeof escapeHtml === 'function' ? escapeHtml(n) : n;
+      });
+      if (textEl) {
+        if (safeNames.length === 1) {
+          textEl.innerHTML = '“<strong>' + safeNames[0] + '</strong>” was removed from title. Remove tag “' + safeNames[0] + '” as well?';
+        } else {
+          textEl.innerHTML = '“<strong>' + safeNames.join(', ') + '</strong>” were removed from title. Remove these tags as well?';
+        }
+      }
+      var removeBtn = t.querySelector('#tag-prompt-remove');
+      var keepBtn = t.querySelector('#tag-prompt-keep');
+
+      removeBtn.textContent = 'Remove';
+      removeBtn.onclick = function(e) {
+        e.stopPropagation();
+        hideTagPromptToast();
+        if (onRemove) onRemove();
+      };
+      keepBtn.textContent = 'Keep';
+      keepBtn.onclick = function(e) {
+        e.stopPropagation();
+        hideTagPromptToast();
+        if (onKeep) onKeep();
+      };
+
+      t.style.display = 'flex';
+      void t.offsetWidth;
+      t.classList.add('toast--visible');
+
+      clearTimeout(showTagRemovePromptToast._timer);
+      showTagRemovePromptToast._timer = setTimeout(function() {
+        hideTagPromptToast();
+      }, 12000);
+    }
+
+    function buildTagIndex(categories) {
+      if (!categories || !categories.length) return [];
+      var catCounts = {};
+
+      function countTag(t, catName) {
+        if (!t || !t.name) return;
+        var k = t.name.trim().toLowerCase();
+        if (!k) return;
+        if (!catCounts[k]) catCounts[k] = {};
+        catCounts[k][catName] = true;
+        if (t.children && t.children.length) {
+          t.children.forEach(function(c) { countTag(c, catName); });
+        }
+      }
+
+      categories.forEach(function(cat) {
+        if (cat.tags) {
+          cat.tags.forEach(function(t) { countTag(t, cat.name); });
+        }
+      });
+
+      var index = [];
+      var seen = {};
+
+      function addTag(t, catName) {
+        if (!t || !t.name) return;
+        var name = t.name.trim();
+        var key = name.toLowerCase();
+        if (!key || seen[key]) return;
+        seen[key] = true;
+
+        // 保守策略：如果该 tag 在多个分类中出现（例如 black 同时在 Car 和 Soil 出现），
+        // 存在跨分类歧义，绝不自动帮填！
+        var cats = Object.keys(catCounts[key] || {});
+        if (cats.length > 1) return;
+
+        var escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var boundaryStart = '(?:^|[\\s.,!?;:\'\"()\\[\\]{}—–\\/\\-])';
+        var boundaryEnd = '(?=$|[\\s.,!?;:\'\"()\\[\\]{}—–\\/\\-])';
+        var regex = new RegExp(boundaryStart + escaped + boundaryEnd, 'i');
+
+        index.push({
+          name: name,
+          lowerName: key,
+          category: catName,
+          regex: regex,
+          length: name.length
+        });
+
+        if (t.children && t.children.length) {
+          t.children.forEach(function(c) { addTag(c, catName); });
+        }
+      }
+
+      categories.forEach(function(cat) {
+        if (cat.tags) {
+          cat.tags.forEach(function(t) { addTag(t, cat.name); });
+        }
+      });
+
+      index.sort(function(a, b) { return b.length - a.length; });
+      return index;
+    }
+
+    function isTagSelected(catName, tagName) {
+      if (!tagName) return false;
+      var scopedKey = catName ? (catName + ':' + tagName) : null;
+      if (scopedKey && selectedTags.indexOf(scopedKey) > -1) return true;
+      if (selectedTags.indexOf(tagName) > -1) {
+        if (!catName) return true;
+        if (window._categoriesData) {
+          var cat = window._categoriesData.find(function(c) { return c.name === catName; });
+          if (cat && cat.tags) {
+            return cat.tags.some(function checkTag(t) {
+              if (t.name === tagName) return true;
+              return t.children && t.children.some(checkTag);
+            });
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+
+    function removeTag(tagKey, tagName) {
+      var idx = selectedTags.indexOf(tagKey);
+      if (idx === -1 && tagName) idx = selectedTags.indexOf(tagName);
+      if (idx > -1) selectedTags.splice(idx, 1);
+      var clean = tagName || (typeof formatTagName === 'function' ? formatTagName(tagKey) : tagKey);
+      if (clean) {
+        _userDeselectedTags[clean.toLowerCase()] = true;
+        delete _titleMatchedTags[clean.toLowerCase()];
+      }
+    }
+
+    function normalizeLegacyTags(tags) {
+      if (!tags || !Array.isArray(tags)) return [];
+      if (!window._categoriesData) return tags.slice();
+      var tagToCats = {};
+      window._categoriesData.forEach(function(cat) {
+        function rec(t) {
+          tagToCats[t.name] = tagToCats[t.name] || [];
+          if (tagToCats[t.name].indexOf(cat.name) === -1) tagToCats[t.name].push(cat.name);
+          if (t.children) t.children.forEach(rec);
+        }
+        (cat.tags || []).forEach(rec);
+      });
+      return tags.map(function(t) {
+        if (!t || typeof t !== 'string') return t;
+        if (t.indexOf(':') !== -1) return t; // already scoped
+        var cats = tagToCats[t];
+        if (cats && cats.length === 1) {
+          return cats[0] + ':' + t; // unambiguous -> upgrade!
+        }
+        return t; // ambiguous or unknown -> keep
+      });
+    }
+
+    function syncChipsVisual() {
+      document.querySelectorAll('#tag-chips .tag-chip').forEach(function(c) {
+        var tKey = c.dataset.tag || c.textContent.trim();
+        var p = typeof parseTag === 'function' ? parseTag(tKey) : { category: null, name: tKey };
+        if (isTagSelected(p.category, p.name)) {
+          c.classList.add('is-selected');
+        } else {
+          c.classList.remove('is-selected');
+        }
+      });
+    }
+
+    function handleTitleAutoTagging() {
+      var nameInput = document.getElementById('region-name');
+      if (!nameInput || !_tagIndex || !_tagIndex.length) return;
+      var title = (nameInput.value || '').trim();
+
+      // 1. 同步 _userDeselectedTags：如果标题中已经不再包含该词，解除主动取消记忆
+      Object.keys(_userDeselectedTags).forEach(function(lowerKey) {
+        var entry = _tagIndex.find(function(item) { return item.lowerName === lowerKey; });
+        if (entry && !entry.regex.test(title)) {
+          delete _userDeselectedTags[lowerKey];
+        }
+      });
+
+      // 2. 检测此前由标题匹配添加的标签，是否在当前标题中被用户删除了
+      var candidatesToRemove = [];
+      Object.keys(_titleMatchedTags).forEach(function(lowerKey) {
+        var entry = _tagIndex.find(function(item) { return item.lowerName === lowerKey; });
+        if (!entry || !entry.regex.test(title)) {
+          var matched = _titleMatchedTags[lowerKey];
+          var scopedKey = matched.category ? (matched.category + ':' + matched.name) : matched.name;
+          if (selectedTags.indexOf(scopedKey) !== -1 || selectedTags.indexOf(matched.name) !== -1) {
+            candidatesToRemove.push(matched);
+          }
+          delete _titleMatchedTags[lowerKey];
+        }
+      });
+
+      if (candidatesToRemove.length > 0) {
+        showTagRemovePromptToast(candidatesToRemove, function() {
+          var removedNames = [];
+          candidatesToRemove.forEach(function(c) {
+            var scopedKey = c.category ? (c.category + ':' + c.name) : c.name;
+            var idx = selectedTags.indexOf(scopedKey);
+            if (idx === -1) idx = selectedTags.indexOf(c.name);
+            if (idx > -1) {
+              selectedTags.splice(idx, 1);
+              removedNames.push(c.name);
+            }
+          });
+          if (removedNames.length > 0) {
+            updateSelectedDisplay();
+            syncChipsVisual();
+            if (typeof debouncedSave === 'function') debouncedSave();
+            showTagToast('Removed tag' + (removedNames.length > 1 ? 's: ' : ': ') + removedNames.join(', '));
+          }
+        }, function() {
+          // Keep: 保留在 selectedTags 中
+        });
+      }
+
+      if (!title) {
+        return;
+      }
+
+      // 3. 扫描当前标题中包含的标签
+      var newlyAdded = [];
+      _tagIndex.forEach(function(item) {
+        if (item.regex.test(title)) {
+          // 如果当前该标签的删除询问 toast 正在显示，但用户又把词打回来了，关闭询问 toast
+          if (typeof hideTagPromptToast === 'function') {
+            var promptEl = document.getElementById('tag-prompt-toast');
+            if (promptEl && promptEl.classList.contains('toast--visible')) {
+              var text = promptEl.textContent || '';
+              if (text.indexOf(item.name) !== -1) {
+                hideTagPromptToast();
+              }
+            }
+          }
+
+          // 若用户此前手动移除了该标签且词仍在标题中，不强行反弹
+          if (_userDeselectedTags[item.lowerName]) return;
+
+          var scopedKey = item.category ? (item.category + ':' + item.name) : item.name;
+          if (!isTagSelected(item.category, item.name)) {
+            selectedTags.push(scopedKey);
+            _titleMatchedTags[item.lowerName] = item;
+            newlyAdded.push(item.name);
+
+            // 若此标签为子标签，按既有规范自动将其父标签也加入 selectedTags
+            if (window._categoriesData) {
+              window._categoriesData.forEach(function(cat) {
+                if (cat.name === item.category && cat.tags) {
+                  cat.tags.forEach(function(pt) {
+                    if (pt.children && pt.children.some(function(c) { return c.name.toLowerCase() === item.lowerName; })) {
+                      var parentScopedKey = cat.name + ':' + pt.name;
+                      if (!isTagSelected(cat.name, pt.name)) {
+                        selectedTags.push(parentScopedKey);
+                        newlyAdded.push(pt.name);
+                      }
+                    }
+                  });
+                }
+              });
+            }
+          } else {
+            // 已经在 selectedTags 中；若此前未记录且词在标题中，记入 _titleMatchedTags 以便后续检测删除
+            if (!_userDeselectedTags[item.lowerName] && !_titleMatchedTags[item.lowerName]) {
+              _titleMatchedTags[item.lowerName] = item;
+            }
+          }
+        }
+      });
+
+      if (newlyAdded.length > 0) {
+        updateSelectedDisplay();
+        syncChipsVisual();
+        if (typeof debouncedSave === 'function') debouncedSave();
+        var tagLabel = newlyAdded.length > 1
+          ? 'tags: ' + newlyAdded.join(', ')
+          : 'tag: ' + newlyAdded[0];
+        showTagToast('Auto-selected ' + tagLabel + ' based on title');
+      }
+    }
+
+    // 绑定标题输入框事件（防抖 input、立即 blur、paste）
+    var titleEl = document.getElementById('region-name');
+    if (titleEl) {
+      titleEl.addEventListener('input', function() {
+        clearTimeout(_autoTagTimer);
+        _autoTagTimer = setTimeout(handleTitleAutoTagging, 250);
+      });
+      titleEl.addEventListener('blur', function() {
+        clearTimeout(_autoTagTimer);
+        handleTitleAutoTagging();
+      });
+      titleEl.addEventListener('paste', function() {
+        setTimeout(handleTitleAutoTagging, 50);
+      });
+    }
+
+    fetch('/api/tags')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data || !data.categories) return;
+        var catSelect = document.getElementById('tag-category-select');
+        var propCatSelect = document.getElementById('proposed-tag-category');
+
+        data.categories.forEach(function(cat) {
+          var opt = document.createElement('option');
+          opt.value = cat.name;
+          opt.textContent = cat.name + ' (' + cat.tags.length + ')';
+          catSelect.appendChild(opt);
+
+          var opt2 = document.createElement('option');
+          opt2.value = cat.name;
+          opt2.textContent = cat.name;
+          propCatSelect.appendChild(opt2);
+        });
+
+        // Store categories data for chip rendering
+        window._categoriesData = data.categories;
+        _tagIndex = buildTagIndex(data.categories);
+        if (selectedTags.length > 0) {
+          selectedTags = normalizeLegacyTags(selectedTags);
+          updateSelectedDisplay();
+          syncChipsVisual();
+        }
+        handleTitleAutoTagging();
+      });
+
+    document.getElementById('tag-category-select').addEventListener('change', function() {
+      var catName = this.value;
+      var chipsDiv = document.getElementById('tag-chips');
+      chipsDiv.innerHTML = '';
+
+      if (!catName || !window._categoriesData) return;
+
+      var cat = window._categoriesData.find(function(c) { return c.name === catName; });
+      if (!cat) return;
+
+      cat.tags.forEach(function(tag) {
+        var row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:4px;';
+
+        var tagKey = catName + ':' + tag.name;
+
+        // Parent tag chip
+        var chip = document.createElement('span');
+        chip.className = 'tag-chip';
+        chip.textContent = tag.name;
+        chip.dataset.tag = tagKey;
+        chip.dataset.tagName = tag.name;
+        if (isTagSelected(catName, tag.name)) chip.classList.add('is-selected');
+        chip.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (isTagSelected(catName, tag.name)) {
+            removeTag(tagKey, tag.name);
+            if (typeof hideTagPromptToast === 'function') hideTagPromptToast();
+            chip.classList.remove('is-selected');
+            // Also deselect all children
+            if (tag.children) {
+              tag.children.forEach(function(child) {
+                removeTag(catName + ':' + child.name, child.name);
+              });
+              renderChildren(); // re-render children
+            }
+          } else {
+            selectedTags.push(tagKey);
+            delete _userDeselectedTags[tag.name.toLowerCase()];
+            chip.classList.add('is-selected');
+          }
+          updateSelectedDisplay();
+        });
+        row.appendChild(chip);
+
+        // Expand toggle for tags with children
+        if (tag.children && tag.children.length > 0) {
+          var toggle = document.createElement('span');
+          toggle.className = 'tag-expand-toggle';
+          toggle.textContent = '▸';
+          toggle.style.cssText = 'cursor:pointer;font-size:12px;padding:2px 4px;user-select:none;';
+          toggle.title = 'Show sub-tags';
+
+          var childRow = document.createElement('div');
+          childRow.style.cssText = 'display:none;padding-left:16px;margin-top:4px;width:100%;';
+
+          function renderChildren() {
+            childRow.innerHTML = '';
+            tag.children.forEach(function(child) {
+              var childKey = catName + ':' + child.name;
+              var cchip = document.createElement('span');
+              cchip.className = 'tag-chip';
+              cchip.style.cssText = 'font-size:12px;';
+              cchip.textContent = child.name;
+              cchip.dataset.tag = childKey;
+              cchip.dataset.tagName = child.name;
+              if (isTagSelected(catName, child.name)) cchip.classList.add('is-selected');
+              cchip.addEventListener('click', function(ev) {
+                ev.stopPropagation();
+                if (isTagSelected(catName, child.name)) {
+                  removeTag(childKey, child.name);
+                  if (typeof hideTagPromptToast === 'function') hideTagPromptToast();
+                  cchip.classList.remove('is-selected');
+                } else {
+                  selectedTags.push(childKey);
+                  delete _userDeselectedTags[child.name.toLowerCase()];
+                  cchip.classList.add('is-selected');
+                  // Auto-select parent when child selected
+                  if (!isTagSelected(catName, tag.name)) {
+                    selectedTags.push(tagKey);
+                    delete _userDeselectedTags[tag.name.toLowerCase()];
+                    chip.classList.add('is-selected');
+                  }
+                }
+                updateSelectedDisplay();
+              });
+              childRow.appendChild(cchip);
+            });
+          }
+
+          toggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            if (childRow.style.display === 'none') {
+              renderChildren();
+              childRow.style.display = 'flex';
+              childRow.style.flexWrap = 'wrap';
+              childRow.style.gap = '4px';
+              toggle.textContent = '▾';
+            } else {
+              childRow.style.display = 'none';
+              toggle.textContent = '▸';
+            }
+          });
+
+          row.appendChild(toggle);
+          chipsDiv.appendChild(row);
+          chipsDiv.appendChild(childRow);
+        } else {
+          chipsDiv.appendChild(row);
+        }
+      });
+    });
+
+    document.getElementById('toggle-propose').addEventListener('click', function() {
+      var el = document.getElementById('propose-tags');
+      el.hidden = !el.hidden;
+      this.textContent = el.hidden ? '+ Propose new tags' : '- Hide proposal';
+    });
+
+    document.getElementById('add-proposed').addEventListener('click', function() {
+      var namesInput = document.getElementById('proposed-tag-names').value.trim();
+      var cat = document.getElementById('proposed-tag-category').value;
+      var errorEl = document.getElementById('propose-error');
+      function showProposeError(msg) {
+        errorEl.textContent = msg;
+        errorEl.hidden = false;
+      }
+      if (!namesInput && !cat) { showProposeError('Please enter a tag name and select a category.'); return; }
+      if (!namesInput) { showProposeError('Please enter at least one tag name.'); return; }
+      if (!cat) { showProposeError('Please select a category.'); return; }
+      errorEl.hidden = true;
+
+      namesInput.split(',').forEach(function(name) {
+        name = name.trim();
+        if (!name) return;
+        if (selectedTags.indexOf(name) > -1 || selectedTags.indexOf(cat + ':' + name) > -1) return;
+        if (proposedTags.some(function(p) { return p.name === name; })) return;
+        proposedTags.push({ name: name, category: cat });
+      });
+
+      document.getElementById('proposed-tag-names').value = '';
+      updateProposedDisplay();
+    });
+
+    function updateSelectedDisplay() {
+      var div = document.getElementById('selected-tags-display');
+      if (!div) return;
+      div.innerHTML = selectedTags.length
+        ? 'Selected: ' + selectedTags.map(function(t) {
+            var cleanName = typeof formatTagName === 'function' ? formatTagName(t) : t;
+            var fullName = typeof formatTagFull === 'function' ? formatTagFull(t) : t;
+            return '<span class="tag-chip is-selected" data-tag="' + escapeHtml(t) + '" data-tag-name="' + escapeHtml(cleanName) + '" title="' + escapeHtml(fullName) + '">'
+              + escapeHtml(cleanName)
+              + '<button type="button" class="tag-chip__remove" aria-label="Remove ' + escapeHtml(cleanName) + ' tag">&times;</button>'
+              + '</span>';
+          }).join(' ')
+        : '';
+
+      div.querySelectorAll('.tag-chip__remove').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var p = btn.closest('.tag-chip');
+          var t = p ? p.getAttribute('data-tag') : null;
+          var tName = p ? p.getAttribute('data-tag-name') : null;
+          if (t) {
+            removeTag(t, tName);
+            if (typeof hideTagPromptToast === 'function') hideTagPromptToast();
+            updateSelectedDisplay();
+            syncChipsVisual();
+            if (typeof debouncedSave === 'function') debouncedSave();
+          }
+        });
+      });
+    }
+
+    function updateProposedDisplay() {
+      var div = document.getElementById('proposed-list');
+      div.innerHTML = proposedTags.length
+        ? 'Proposed: ' + proposedTags.map(function(p, i) {
+            return '<span class="tag-chip is-proposed">' + escapeHtml(p.name) + ' [' + escapeHtml(p.category) + ']'
+              + '<button type="button" class="proposed-remove" data-index="' + i + '" aria-label="Remove proposed tag">&times;</button></span>';
+          }).join(' ')
+        : '';
+    }
+
+    document.getElementById('proposed-list').addEventListener('click', function(e) {
+      var btn = e.target && e.target.closest ? e.target.closest('.proposed-remove') : null;
+      if (!btn) return;
+      var idx = parseInt(btn.getAttribute('data-index'), 10);
+      if (!isNaN(idx) && idx >= 0 && idx < proposedTags.length) {
+        proposedTags.splice(idx, 1);
+        updateProposedDisplay();
+      }
+    });
+
+    var MAX_LINKS = 5;
+    var linkResolveStates = []; // [{ status: 'idle'|'resolving'|'resolved'|'failed', streetview: {...}|null }]
+
+    function createLinkRow(index) {
+      var row = document.createElement('div');
+      row.className = 'link-row';
+      row.dataset.index = String(index);
+      row.innerHTML =
+        '<div class="link-row__input-wrap">' +
+          '<input type="url" class="link-row__input" placeholder="https://maps.app.goo.gl/..." maxlength="180" />' +
+        '</div>' +
+        '<span class="link-row__status" aria-label="Resolution status"></span>' +
+        '<button type="button" class="link-row__remove" aria-label="Remove this link">&times;</button>' +
+        '<div class="link-row__error"></div>';
+
+      var input = row.querySelector('.link-row__input');
+      var statusEl = row.querySelector('.link-row__status');
+      var errorEl = row.querySelector('.link-row__error');
+
+      // Resolve on blur (read data-index dynamically to avoid stale closure)
+      input.addEventListener('blur', function() {
+        var currentIdx = parseInt(row.dataset.index);
+        resolveLinkRow(currentIdx, input.value.trim(), statusEl);
+      });
+
+      // Remove button (read data-index dynamically to avoid stale closure)
+      row.querySelector('.link-row__remove').addEventListener('click', function() {
+        var currentIdx = parseInt(row.dataset.index);
+        removeLinkRow(currentIdx);
+      });
+
+      return row;
+    }
+
+    function resolveLinkRow(index, url, statusEl) {
+      var row = statusEl.parentElement;
+      var errorEl = row && row.querySelector('.link-row__error');
+
+      function showError(msg) {
+        if (errorEl) { errorEl.textContent = msg; errorEl.style.display = 'block'; }
+      }
+      function clearError() {
+        if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+      }
+
+      if (!url) {
+        if (!linkResolveStates[index] || linkResolveStates[index]._active === false) return;
+        if (linkResolveStates[index]) {
+          linkResolveStates[index].status = 'idle';
+          linkResolveStates[index].streetview = null;
+        }
+        statusEl.className = 'link-row__status';
+        statusEl.textContent = '';
+        statusEl.title = '';
+        clearError();
+        return;
+      }
+      // Guard: row may have been removed since blur event fired
+      if (!linkResolveStates[index] || linkResolveStates[index]._active === false) return;
+      if (linkResolveStates[index]) {
+        linkResolveStates[index].status = 'resolving';
+        linkResolveStates[index].streetview = null;
+      }
+      statusEl.className = 'link-row__status is-resolving';
+      statusEl.textContent = '⏳';
+
+      parseLink(url, function(streetview) {
+        // Guard: row may have been removed during parseLink
+        if (!linkResolveStates[index] || linkResolveStates[index]._active === false) return;
+        if (streetview._needsResolution) {
+          fetch('/api/submit?action=resolve-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+            body: JSON.stringify({ link: url })
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(resolved) {
+            // Guard: row may have been removed during fetch
+            if (!linkResolveStates[index] || linkResolveStates[index]._active === false) return;
+            if (resolved.error) {
+              if (linkResolveStates[index]) {
+                linkResolveStates[index].status = 'failed';
+                linkResolveStates[index].streetview = null;
+              }
+              statusEl.className = 'link-row__status is-failed';
+              statusEl.textContent = '✗';
+              showError(resolved.error);
+            } else {
+              if (linkResolveStates[index]) {
+                linkResolveStates[index].status = 'resolved';
+                linkResolveStates[index].streetview = resolved;
+              }
+              statusEl.className = 'link-row__status is-resolved';
+              statusEl.textContent = '✓';
+              clearError();
+            }
+          })
+          .catch(function() {
+            // Guard: row may have been removed during fetch
+            if (!linkResolveStates[index] || linkResolveStates[index]._active === false) return;
+            if (linkResolveStates[index]) {
+              linkResolveStates[index].status = 'failed';
+              linkResolveStates[index].streetview = null;
+            }
+            statusEl.className = 'link-row__status is-failed';
+            statusEl.textContent = '✗';
+            showError('Network error — please try again. If it persists, the server may be down.');
+          });
+          return;
+        }
+        // Parsed directly from full URL
+        if (linkResolveStates[index]) {
+          linkResolveStates[index].status = 'resolved';
+          linkResolveStates[index].streetview = streetview;
+        }
+        statusEl.className = 'link-row__status is-resolved';
+        statusEl.textContent = '✓';
+        clearError();
+      });
+    }
+
+    function removeLinkRow(index) {
+      var container = document.getElementById('link-inputs');
+      var rows = container.querySelectorAll('.link-row');
+      if (rows.length <= 1) return; // keep at least one row
+      var row = container.querySelector('.link-row[data-index="' + index + '"]');
+      if (row) row.remove();
+      // Mark inactive so in-flight fetches don't corrupt state
+      if (linkResolveStates[index]) linkResolveStates[index]._active = false;
+      linkResolveStates.splice(index, 1);
+      reindexLinkRows();
+    }
+
+    function reindexLinkRows() {
+      var container = document.getElementById('link-inputs');
+      var rows = container.querySelectorAll('.link-row');
+      var single = rows.length <= 1;
+      rows.forEach(function(row, i) {
+        row.dataset.index = String(i);
+        var rmBtn = row.querySelector('.link-row__remove');
+        if (rmBtn) rmBtn.style.display = single ? 'none' : '';
+      });
+      updateAddButton();
+    }
+
+    function updateAddButton() {
+      var container = document.getElementById('link-inputs');
+      var btn = document.getElementById('add-link-btn');
+      var count = container.querySelectorAll('.link-row').length;
+      var maxed = count >= MAX_LINKS;
+      if (btn) {
+        btn.disabled = maxed;
+        btn.style.display = maxed ? 'none' : '';
+      }
+    }
+
+    (function initLinkRows() {
+      var container = document.getElementById('link-inputs');
+      if (!container) return;
+      // Start with one empty row
+      linkResolveStates = [];
+      container.appendChild(createLinkRow(0));
+      linkResolveStates.push({ status: 'idle', streetview: null, _active: true });
+      reindexLinkRows();
+
+      var addBtn = document.getElementById('add-link-btn');
+      if (addBtn) {
+        addBtn.addEventListener('click', function() {
+          var idx = container.querySelectorAll('.link-row').length;
+          container.appendChild(createLinkRow(idx));
+          linkResolveStates.push({ status: 'idle', streetview: null, _active: true });
+          reindexLinkRows();
+        });
+      }
+    })();
+
+    // ----- Optional source attribution (plonkit / rmrg / geohints / other) -----
+    // 规则表 SOURCE_RULES 来自 js/utils.js，与服务端 api/_lib/source.js 逐字相同
+    //（由 scripts/test-source-rules-parity.js 机器校验）。这里只做 UX：即时反馈 +
+    // 挡住手滑；真正的安全边界在服务端（normalizeSource 会重新校验并归一）。
+    // example 同时用作输入框的 placeholder 和校验失败时的示例。
+    // 前三条是**逐字照搬**需求里给的通配形式（`https://www.plonkit.net/*/*` 等），
+    // 不要"好心"换成某个看起来更像真的具体页面 —— 那些是编的。
+    var SOURCE_PICKER = {
+      plonkit:  { label: 'Plonk It', example: 'https://www.plonkit.net/*/*' },
+      rmrg:     { label: 'RMRG',     example: 'https://rmrg.me/*' },
+      geohints: { label: 'GeoHints', example: 'https://geohints.com/meta/*' },
+      // 第四条需求没给过格式，用 RFC 2606 保留域占位，不冒充任何真实站点
+      other:    { label: 'Source',   example: 'https://example.com/*' }
+    };
+    var MAX_SOURCE_URL_LENGTH = 300; // 与 api/_lib/source.js 的 MAX_SOURCE_URL_LENGTH 一致
+
+    function getSelectedSourceType() {
+      var chip = document.querySelector('#source-chips .source-chip[aria-pressed="true"]');
+      return chip ? chip.getAttribute('data-source') : '';
+    }
+
+    function sourceErrorFor(type, url) {
+      var meta = SOURCE_PICKER[type];
+      if (!meta) return 'Unknown source type.';
+      if (!url) return 'Paste the ' + meta.label + ' link, or click the chip again to deselect.';
+      if (url.length > MAX_SOURCE_URL_LENGTH) return 'Source link is too long (max ' + MAX_SOURCE_URL_LENGTH + ' characters).';
+      // 前后端同一套规则，只判域名 + 路径非空，不判路径内容
+      if (!SOURCE_RULES[type] || !SOURCE_RULES[type].test(url)) {
+        return 'That is not a ' + meta.label + ' link. Example: ' + meta.example;
+      }
+      return '';
+    }
+
+    function setSourceFeedback(ok, msg) {
+      var statusEl = document.getElementById('source-status');
+      var errorEl = document.getElementById('source-error');
+      if (!statusEl || !errorEl) return;
+      statusEl.className = 'link-row__status ' + (ok ? 'is-resolved' : 'is-failed');
+      statusEl.textContent = ok ? '✓' : '✗';
+      errorEl.textContent = ok ? '' : (msg || '');
+      errorEl.style.display = (!ok && msg) ? 'block' : 'none';
+    }
+
+    function clearSourceFeedback() {
+      var statusEl = document.getElementById('source-status');
+      var errorEl = document.getElementById('source-error');
+      if (statusEl) { statusEl.className = 'link-row__status'; statusEl.textContent = ''; }
+      if (errorEl) { errorEl.textContent = ''; errorEl.style.display = 'none'; }
+    }
+
+    function validateSourceInput() {
+      var type = getSelectedSourceType();
+      if (!type) { clearSourceFeedback(); return true; }
+      var url = document.getElementById('source-url').value.trim();
+      var err = sourceErrorFor(type, url);
+      setSourceFeedback(!err, err);
+      return !err;
+    }
+
+    // 把选择器重置/回填到 (type, url)。type 不合法或为空即视为未标注，收起输入框。
+    function applySource(type, url) {
+      var known = !!(type && SOURCE_PICKER[type]);
+      document.querySelectorAll('#source-chips .source-chip').forEach(function(chip) {
+        var on = known && chip.getAttribute('data-source') === type;
+        chip.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      var wrap = document.getElementById('source-url-wrap');
+      var input = document.getElementById('source-url');
+      if (!wrap || !input) return;
+      input.value = known ? (url || '') : '';
+      wrap.hidden = !known;
+      if (known) {
+        input.placeholder = SOURCE_PICKER[type].example;
+        if (input.value.trim()) {
+          var err = sourceErrorFor(type, input.value.trim());
+          setSourceFeedback(!err, err);
+        } else {
+          clearSourceFeedback();
+        }
+      } else {
+        clearSourceFeedback();
+      }
+    }
+
+    (function initSourcePicker() {
+      var chips = document.querySelectorAll('#source-chips .source-chip');
+      if (!chips.length) return;
+      chips.forEach(function(chip) {
+        chip.addEventListener('click', function() {
+          // 再点同一个 chip = 取消选中并收起文本框
+          if (chip.getAttribute('aria-pressed') === 'true') {
+            applySource('', '');
+            return;
+          }
+          applySource(chip.getAttribute('data-source'), '');
+        });
+      });
+      var input = document.getElementById('source-url');
+      if (input) {
+        input.addEventListener('blur', function() { validateSourceInput(); });
+        input.addEventListener('input', function() { clearSourceFeedback(); });
+      }
+    })();
+
+    // Parse Google Maps link (client-side best effort: extract from full URL; short links handled by backend)
+    function parseLink(url, callback) {
+      // Try to extract coordinates directly from full URL
+      var coordMatch = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+      if (coordMatch) {
+        var headingMatch = url.match(/([\d.]+)h/);
+        var tiltMatch = url.match(/([\d.]+)t/);
+        var fovMatch = url.match(/([\d.]+)y/);
+        var tilt = tiltMatch ? parseFloat(tiltMatch[1]) : 90;
+        var pano = (typeof extractPanoId === 'function') ? extractPanoId(url) : null;
+        callback({
+          lat: parseFloat(coordMatch[1]),
+          lng: parseFloat(coordMatch[2]),
+          heading: headingMatch ? parseFloat(headingMatch[1]) : 0,
+          pitch: parseFloat((tilt - 90).toFixed(2)),
+          fov: fovMatch ? parseFloat(fovMatch[1]) : 90,
+          pano: pano || undefined
+        });
+        return;
+      }
+
+      // Short link: client cannot resolve (CORS restriction)
+      callback({ lat: 0, lng: 0, heading: 0, pitch: 0, fov: 90, _needsResolution: true });
+    }
+
+    document.getElementById('submit-btn').addEventListener('click', function() {
+      var name = document.getElementById('region-name').value.trim();
+      var desc = document.getElementById('region-desc').value.trim();
+      var detailDesc = document.getElementById('region-detail-desc').value.trim();
+      var countryId = document.getElementById('region-country').value;
+      var feedback = document.getElementById('form-feedback');
+
+      if (!name || !desc || !countryId) {
+        feedback.className = 'form-feedback is-error';
+        feedback.textContent = 'Please fill in region name, country/region, and description.';
+        return;
+      }
+      // Source is optional, but a filled-in source must be valid — a source that
+      // does not pass blocks submission ("否则不给过").
+      if (!validateSourceInput()) {
+        feedback.className = 'form-feedback is-error';
+        feedback.textContent = 'Please fix the source link, or click the chip again to remove the source.';
+        return;
+      }
+      // 国家范围不需要几何。region 范围这一支**一个字都没动**：不画照样拦，文案照旧。
+      if (currentScope !== 'country' && drawnLayers.length === 0) {
+        feedback.className = 'form-feedback is-error';
+        feedback.textContent = 'Please draw at least one polygon or line on the map.';
+        return;
+      }
+
+      // Collect all links and their resolved streetviews
+      var allLinks = [];
+      var allStreetviews = [];
+      var linkRows = document.getElementById('link-inputs').querySelectorAll('.link-row');
+      linkRows.forEach(function(row) {
+        var input = row.querySelector('.link-row__input');
+        var url = input.value.trim();
+        if (url) {
+          allLinks.push(url);
+          var idx = parseInt(row.dataset.index);
+          var state = linkResolveStates[idx];
+          if (state && state.streetview && state.streetview.lat !== 0 && state.streetview.lng !== 0) {
+            allStreetviews.push(state.streetview);
+          } else {
+            allStreetviews.push({ lat: 0, lng: 0, heading: 0, pitch: 0, fov: 90 });
+          }
+        }
+      });
+
+      var btn = document.getElementById('submit-btn');
+
+      if (allLinks.length === 0) {
+        feedback.className = 'form-feedback is-error';
+        feedback.textContent = 'Please enter at least one Google Maps link.';
+        btn.disabled = false;
+        btn.textContent = btn.dataset.editId ? 'Resubmit' : 'Submit';
+        return;
+      }
+
+      // Warn if any link failed to resolve
+      var failedCount = 0;
+      linkRows.forEach(function(row) {
+        var idx = parseInt(row.dataset.index);
+        var state = linkResolveStates[idx];
+        if (state && state.status === 'failed') failedCount++;
+      });
+      if (failedCount > 0 && !confirm(failedCount + ' link(s) failed to resolve. Submit anyway?')) {
+        btn.disabled = false;
+        btn.textContent = btn.dataset.editId ? 'Resubmit' : 'Submit';
+        return;
+      }
+
+      var geometries = drawnLayers.map(function(layer) {
+        var raw = layer.toGeoJSON();
+        var geom;
+        if (raw.type === 'FeatureCollection' && raw.features && raw.features.length > 0) {
+          geom = raw.features[0].geometry;
+        } else if (raw.type === 'Feature') {
+          geom = raw.geometry;
+        } else {
+          geom = raw;
+        }
+        // Stamp arrow flag per-geometry
+        var state = arrowStates.get(layer);
+        if (state && state.showArrow && geom.type === 'LineString') {
+          geom.arrow = true;
+        }
+        return geom;
+      });
+
+      // 国家范围条目**不携带几何**。用户先前画的东西仍然留在画布上（切回 region 就回来），
+      // 但不参与这次提交 —— 用规范空数组 '[]'，与服务端 normalizeGeometries 的产出同形。
+      var submitGeojson = currentScope === 'country' ? [] : geometries;
+
+      // Storage gate: reject submissions over the total point budget.
+      // 用 submitGeojson 而不是 geometries：国家范围下画布上残留的形状不该把提交卡住。
+      if (totalPoints(submitGeojson) > MAX_POINTS) {
+        btn.disabled = false;
+        btn.textContent = btn.dataset.editId ? 'Resubmit' : 'Submit';
+        document.getElementById('form-feedback').className = 'form-feedback is-error';
+        document.getElementById('form-feedback').textContent = 'Total coordinate points exceed the limit of ' + MAX_POINTS + '. Simplify shapes and try again.';
+        return;
+      }
+      var tags = selectedTags.slice();
+
+      // Optional source attribution — '' when no chip is selected.
+      var sourceType = getSelectedSourceType();
+      var sourceUrl = sourceType ? document.getElementById('source-url').value.trim() : '';
+
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      function doSubmit(streetviewArr, linkArr) {
+        var editId = btn.dataset.editId;
+        var editStatus = btn.dataset.editStatus;
+        var method = 'POST';
+        var body = {
+          name: name, description: desc, detailed_description: detailDesc, country_id: countryId, tags: tags,
+          proposed_tags: proposedTags,
+          source_type: sourceType, source_url: sourceUrl,
+          scope: currentScope,
+          geojson: submitGeojson, streetview: streetviewArr, link: linkArr
+        };
+
+        if (editId) {
+          if (editStatus === 'pending') {
+            // PATCH existing pending submission directly
+            method = 'PATCH';
+            // PATCH 不发 scope —— 服务端不接受改写它（创建后不可变），发了也只是被忽略。
+            body = { id: editId, name: name, description: desc, detailed_description: detailDesc, country_id: countryId, tags: tags, proposed_tags: proposedTags, source_type: sourceType, source_url: sourceUrl, geojson: submitGeojson, streetview: streetviewArr, link: linkArr };
+          } else {
+            // Create draft row for approved/rejected submissions
+            body.edit_target_id = editId;
+          }
+        }
+
+        fetch('/api/submit', {
+          method: method,
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+          body: JSON.stringify(body)
+        })
+        .then(function(r) {
+          if (!r.ok) {
+            return r.json().then(function(err) { throw new Error(err.error || 'Server error: ' + r.status); });
+          }
+          return r.json();
+        })
+        .then(function(data) {
+          feedback.className = 'form-feedback is-success';
+          var wasHidden = btn.dataset.wasHidden === '1';
+          var isTrustedUser = !!(window._user && (window._user.role === 'trusted' || window._user.role === 'admin'));
+          if (wasHidden && isTrustedUser) {
+            feedback.innerHTML = 'Saved and approved — this submission is now visible again. <a href="/my-submissions">View my submissions</a>';
+          } else if (wasHidden) {
+            feedback.innerHTML = 'Submitted successfully! This submission is currently hidden — it will become visible again once an admin approves it. <a href="/my-submissions">View my submissions</a>';
+          } else if (editId && editStatus !== 'pending') {
+            feedback.innerHTML = 'Modification submitted for review. Original version remains visible until approved. <a href="/my-submissions">View my submissions</a>';
+          } else {
+            feedback.innerHTML = 'Submitted successfully! Pending review. <a href="/my-submissions">View my submissions</a>';
+          }
+          btn.disabled = false;
+          btn.textContent = 'Submit';
+          // Save last geometry for "reuse last submission" (geometry only)
+          try {
+            var uid = window._user && window._user.id;
+            if (uid && geometries && geometries.length) {
+              localStorage.setItem('geoguide_last_geometry_' + uid, JSON.stringify(geometries));
+            }
+          } catch(e) { /* storage full or disabled */ }
+          // Clear auto-save draft on success
+          if (window.__draftClear) window.__draftClear();
+          // Clear edit mode state
+          delete btn.dataset.editId;
+          delete btn.dataset.editStatus;
+          delete btn.dataset.wasHidden;
+          document.getElementById('region-name').value = '';
+          document.getElementById('region-desc').value = '';
+          document.getElementById('region-detail-desc').value = '';
+          document.getElementById('region-country').value = '';
+          if (typeof hideCountryPromptToast === 'function') hideCountryPromptToast();
+          // Clear link rows
+          var linkContainer = document.getElementById('link-inputs');
+          if (linkContainer) {
+            linkContainer.innerHTML = '';
+            linkResolveStates = [];
+            linkContainer.appendChild(createLinkRow(0));
+            linkResolveStates.push({ status: 'idle', streetview: null, _active: true });
+            reindexLinkRows();
+          }
+          document.querySelectorAll('.tag-chips .tag-chip.is-selected').forEach(function(c) { c.classList.remove('is-selected'); });
+          // Clear the source picker too (deselect chip, hide + empty the url input)
+          applySource('', '');
+          selectedTags = [];
+          proposedTags = [];
+          document.getElementById('tag-category-select').value = '';
+          document.getElementById('tag-chips').innerHTML = '';
+          updateSelectedDisplay();
+          updateProposedDisplay();
+          // Use removeShape for consistent cleanup (clone array since removeShape mutates it)
+          drawnLayers.slice().forEach(function(layer) { removeShape(layer); });
+          // removeShape already clears arrowStates and drawnLayers; ensure they're reset
+          arrowStates.clear();
+          drawnLayers = [];
+          renderShapeList();
+          // Clear the ?edit= URL param on success
+          if (window.history && window.history.replaceState) {
+            var newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+          }
+        })
+        .catch(function(e) {
+          feedback.className = 'form-feedback is-error';
+          feedback.textContent = 'Submission failed: ' + e.message;
+          btn.disabled = false;
+          btn.textContent = btn.dataset.editId ? 'Resubmit' : 'Submit';
+        });
+      }
+
+      // Check for short links that haven't been resolved yet — resolve in parallel
+      var needsResolution = [];
+      allStreetviews.forEach(function(sv, i) {
+        if (sv.lat === 0 && sv.lng === 0) {
+          needsResolution.push({ index: i, link: allLinks[i] });
+        }
+      });
+
+      function doFinalSubmit() {
+        var hasValid = allStreetviews.some(function(sv) { return sv.lat !== 0 || sv.lng !== 0; });
+        if (!hasValid) {
+          feedback.className = 'form-feedback is-error';
+          feedback.textContent = 'At least one valid Street View link is required.';
+          btn.disabled = false;
+          btn.textContent = btn.dataset.editId ? 'Resubmit' : 'Submit';
+          return;
+        }
+        doSubmit(allStreetviews, allLinks);
+      }
+
+      if (needsResolution.length > 0) {
+        Promise.all(needsResolution.map(function(item) {
+          return fetch('/api/submit?action=resolve-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+            body: JSON.stringify({ link: item.link })
+          })
+          .then(function(r) { return r.json(); })
+          .then(function(resolved) {
+            if (!resolved.error && resolved.lat !== 0) {
+              allStreetviews[item.index] = resolved;
+            }
+          })
+          .catch(function() { /* keep placeholder coords */ });
+        })).then(function() { doFinalSubmit(); });
+      } else {
+        doFinalSubmit();
+      }
+    });
+  </script>
+  <script>
+    // Edit mode: if ?edit=<id> is present, prefill form with existing submission
+    (function() {
+      var urlParams = new URLSearchParams(window.location.search);
+      var editId = urlParams.get('edit');
+      if (!editId) return;
+
+      window._authReady.then(function(user) {
+        if (!user) return;
+
+        fetch('/api/user-submissions?action=single&id=' + encodeURIComponent(editId))
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            var existing = data.submission;
+            if (!existing) {
+              document.getElementById('form-feedback').className = 'form-feedback is-error';
+              document.getElementById('form-feedback').textContent = 'Submission not found.';
+              return;
+            }
+
+            // Remember whether the submission being edited was hidden, so we can
+            // tell the user it will become visible again once approved.
+            var wasHidden = Number(existing.is_hidden) === 1;
+
+            // Check for existing draft row (prevent duplicate drafts)
+            var draftRow = (data.drafts && data.drafts.length > 0) ? data.drafts[0] : null;
+            if (draftRow) {
+              // Edit the existing draft instead of creating a new one
+              existing = draftRow;
+              // Update editId to point to the draft row so we PATCH it
+              editId = draftRow.id;
+            }
+
+            // Pre-fill form fields
+            document.getElementById('region-name').value = existing.name || '';
+            document.getElementById('region-desc').value = existing.description || '';
+            document.getElementById('region-detail-desc').value = existing.detailed_description || '';
+            document.getElementById('region-country').value = existing.country_id || 'south-africa';
+
+            // 范围**创建后不可变** → 编辑态只读展示：radio 禁用，服务端也会拒收 PATCH 里的 scope。
+            // 不清空任何已画的形状 —— 切模式那套隐藏逻辑在这里同样适用（国家范围本来就没几何）。
+            setScope(existing.scope === 'country' ? 'country' : 'region');
+            var scopeInput = document.querySelector('.scope-choice__opt input[value="' + currentScope + '"]');
+            if (scopeInput) scopeInput.checked = true;
+            document.querySelectorAll('.scope-choice__opt input').forEach(function(inp) { inp.disabled = true; });
+            var scopeHintEl = document.getElementById('scope-hint');
+            if (scopeHintEl) scopeHintEl.textContent += ' Scope can’t be changed after submission.';
+
+            // Restore the optional source attribution (''/missing = not attributed)
+            applySource(existing.source_type || '', existing.source_url || '');
+
+            // Prefill link rows from existing submission
+            var existingLinks = [];
+            var existingStreetviews = [];
+            if (existing.link) {
+              if (Array.isArray(existing.link)) {
+                existingLinks = existing.link;
+              } else if (typeof existing.link === 'string') {
+                existingLinks = [existing.link];
+              }
+            }
+            if (existing.streetview) {
+              if (Array.isArray(existing.streetview)) {
+                existingStreetviews = existing.streetview;
+              } else if (existing.streetview && typeof existing.streetview.lat === 'number') {
+                existingStreetviews = [existing.streetview];
+              }
+            }
+            // Ensure arrays are same length
+            while (existingStreetviews.length < existingLinks.length) {
+              existingStreetviews.push({ lat: 0, lng: 0, heading: 0, pitch: 0, fov: 90 });
+            }
+
+            // Populate link rows from stored data. Already-resolved streetviews are
+            // reused as-is (no re-resolution); only entries lacking valid coords are
+            // retried. New/edited links are still resolved via the input blur handler.
+            var linkContainer = document.getElementById('link-inputs');
+            if (linkContainer && existingLinks.length > 0) {
+              linkContainer.innerHTML = '';
+              linkResolveStates = [];
+              existingLinks.forEach(function(linkUrl, i) {
+                var row = createLinkRow(i);
+                linkContainer.appendChild(row);
+                row.querySelector('.link-row__input').value = linkUrl;
+
+                var stored = existingStreetviews[i];
+                var statusEl = row.querySelector('.link-row__status');
+                var hasCoords = stored && typeof stored.lat === 'number' && (stored.lat !== 0 || stored.lng !== 0);
+                if (hasCoords) {
+                  linkResolveStates.push({ status: 'resolved', streetview: stored, _active: true });
+                  statusEl.className = 'link-row__status is-resolved';
+                  statusEl.textContent = '✓';
+                } else {
+                  linkResolveStates.push({ status: 'idle', streetview: null, _active: true });
+                }
+              });
+              reindexLinkRows();
+              // Retry resolution only for entries that lack stored coordinates.
+              existingLinks.forEach(function(linkUrl, i) {
+                if (linkResolveStates[i] && linkResolveStates[i].status === 'idle') {
+                  var row = linkContainer.querySelector('.link-row[data-index="' + i + '"]');
+                  var statusEl = row && row.querySelector('.link-row__status');
+                  if (statusEl) resolveLinkRow(i, linkUrl, statusEl);
+                }
+              });
+            }
+
+            // Pre-select tags
+            if (existing.tags && Array.isArray(existing.tags)) {
+              selectedTags = normalizeLegacyTags(existing.tags);
+              updateSelectedDisplay();
+            }
+
+            // Render existing geometry on the map
+            var geojson = existing.geojson;
+            // Normalize to array (backward compat: old single geometry)
+            var geometries;
+            if (Array.isArray(geojson)) {
+              geometries = geojson;
+            } else if (geojson && geojson.type) {
+              geometries = [geojson];
+            } else {
+              geometries = [];
+            }
+
+            drawnLayers = [];
+            arrowStates.clear();
+
+            geometries.forEach(function(geom) {
+              var layer = L.geoJSON(geom, { pmIgnore: false }).addTo(map);
+              if (layer.pm) { layer.pm.enable(); }
+              drawnLayers.push(layer);
+
+              var isLine = geom.type === 'LineString';
+              var hasArrow = isLine && (geom.arrow === true || (geom.properties && geom.properties.arrow === true));
+              arrowStates.set(layer, { showArrow: hasArrow, decorator: null });
+
+              if (hasArrow) {
+                layer.eachLayer(function(l) {
+                  if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+                    var state = arrowStates.get(layer);
+                    state.decorator = createArrowDecorator(l, layer);
+                  }
+                });
+              }
+            });
+
+            renderShapeList();
+
+            // Fit map to all shapes
+            if (drawnLayers.length > 0) {
+              try {
+                var allBounds = drawnLayers[0].getBounds();
+                for (var i = 1; i < drawnLayers.length; i++) {
+                  allBounds.extend(drawnLayers[i].getBounds());
+                }
+                map.fitBounds(allBounds, { padding: [30, 30] });
+              } catch(e) { /* bounds error */ }
+            }
+
+            // Update submit button
+            var submitBtn = document.getElementById('submit-btn');
+            submitBtn.textContent = 'Resubmit';
+            submitBtn.dataset.editId = editId;
+            submitBtn.dataset.editStatus = existing.status;
+            submitBtn.dataset.wasHidden = wasHidden ? '1' : '0';
+          })
+          .catch(function(err) {
+            document.getElementById('form-feedback').className = 'form-feedback is-error';
+            document.getElementById('form-feedback').textContent = 'Failed to load submission: ' + err.message;
+          });
+      });
+    })();
+
+    window._authReady.then(function(user) {
+      if (!user) {
+        document.getElementById('submit-form').style.display = 'none';
+        document.getElementById('login-gate').style.display = 'block';
+      } else {
+        document.getElementById('submit-form').style.display = 'block';
+        map.invalidateSize();
+
+        // Show "reuse last geometry" if a saved geometry exists (not in edit mode)
+        var urlParams = new URLSearchParams(window.location.search);
+        if (!urlParams.get('edit')) {
+          var uid = user && user.id;
+          var last = null;
+          try { last = uid ? localStorage.getItem('geoguide_last_geometry_' + uid) : null; } catch(e) {}
+          if (last) {
+            document.getElementById('reuse-last-btn').style.display = '';
+          }
+        }
+      }
+    });
+
+    // Reuse last geometry (geometry only)
+    document.getElementById('reuse-last-btn').addEventListener('click', function() {
+      var uid = window._user && window._user.id;
+      if (!uid) return;
+      var raw = null;
+      try { raw = localStorage.getItem('geoguide_last_geometry_' + uid); } catch(e) {}
+      if (!raw) return;
+      var geoms;
+      try { geoms = JSON.parse(raw); } catch(e) { return; }
+      if (!Array.isArray(geoms) || geoms.length === 0) return;
+      if (drawnLayers.length > 0 && !confirm('This will replace the shapes you\'ve drawn. Continue?')) return;
+      loadGeometriesIntoEditor(geoms);
+    });
+
+    // Import GeoJSON/KML file
+    document.getElementById('import-btn').addEventListener('click', function() {
+      document.getElementById('import-file').click();
+    });
+
+    document.getElementById('import-file').addEventListener('change', function(e) {
+      var input = e.target;
+      var file = input.files && input.files[0];
+      if (!file) return;
+      var ext = (file.name.split('.').pop() || '').toLowerCase();
+      var reader = new FileReader();
+      reader.onload = function() {
+        var feedback = document.getElementById('form-feedback');
+        try {
+          var res = importFileToGeometries(String(reader.result), ext);
+          if (res.geometries.length === 0) {
+            feedback.className = 'form-feedback is-error';
+            feedback.textContent = 'No supported geometry found in the file (Point/Line/Polygon).';
+            return;
+          }
+          if (res.geometries.length > MAX_SHAPES) {
+            feedback.className = 'form-feedback is-error';
+            feedback.textContent = 'File contains ' + res.geometries.length + ' shapes, over the limit of ' + MAX_SHAPES + '. Please split and import.';
+            return;
+          }
+          // Auto-simplify dense files over the point budget (storage gate).
+          var geometries = res.geometries;
+          var simplifiedNote = '';
+          if (totalPoints(geometries) > MAX_POINTS) {
+            var originalCount = totalPoints(geometries);
+            var tol = 1e-4;
+            while (totalPoints(geometries) > MAX_POINTS && tol <= 0.02) {
+              geometries = geometries.map(function (g) {
+                return simplifyGeometry(JSON.parse(JSON.stringify(g)), tol);
+              });
+              tol *= 2;
+            }
+            if (totalPoints(geometries) > MAX_POINTS) {
+              feedback.className = 'form-feedback is-error';
+              feedback.textContent = 'File is too dense: still ' + totalPoints(geometries) + ' points after simplifying, over the limit of ' + MAX_POINTS + '. Please split the file and import.';
+              return;
+            }
+            simplifiedNote = ' (simplified ' + originalCount + '->' + totalPoints(geometries) + ' points)';
+          }
+          if (drawnLayers.length > 0 && !confirm('This will replace the shapes you\'ve drawn. Continue?')) return;
+          loadGeometriesIntoEditor(geometries);
+          // Prefill name/description from first feature (only if empty)
+          var nameEl = document.getElementById('region-name');
+          var descEl = document.getElementById('region-desc');
+          if (res.firstName && !nameEl.value.trim()) nameEl.value = res.firstName;
+          if (res.firstDescription && !descEl.value.trim()) descEl.value = res.firstDescription;
+          feedback.className = 'form-feedback is-success';
+          var msg = 'Imported ' + geometries.length + ' shapes';
+          if (res.markerPoints > 0) msg += ' (skipped ' + res.markerPoints + ' marker point' + (res.markerPoints === 1 ? '' : 's') + ')';
+          if (res.skipped > 0) msg += ' (skipped ' + res.skipped + ' unsupported geometries)';
+          if (simplifiedNote) msg += simplifiedNote;
+          feedback.textContent = msg;
+        } catch (err) {
+          feedback.className = 'form-feedback is-error';
+          feedback.textContent = 'Import failed: ' + err.message;
+        } finally {
+          input.value = ''; // allow re-selecting the same file
+        }
+      };
+      reader.onerror = function() {
+        var feedback = document.getElementById('form-feedback');
+        feedback.className = 'form-feedback is-error';
+        feedback.textContent = 'Failed to read the file.';
+      };
+      reader.readAsText(file);
+    });
+  </script>
+  <script>
+  // Mobile warning
+  (function() {
+    var warning = document.getElementById('mobile-warning');
+    if (!warning) return;
+    if (window.innerWidth <= 680) {
+      warning.hidden = false;
+    }
+    var dismissBtn = document.getElementById('mobile-warning-dismiss');
+    if (dismissBtn) {
+      dismissBtn.addEventListener('click', function() { warning.hidden = true; });
+    }
+  })();
+  </script>
+  <script>
+  // Auto-save draft to localStorage (500ms debounce)
+  (function() {
+    var draftKey = null;
+    var saveTimer = null;
+
+    function getDraftKey(userId) {
+      return 'geoguide_draft_' + userId;
+    }
+
+    function saveDraft() {
+      if (!draftKey) return;
+      // Skip empty drafts to avoid showing restore bar after successful submit
+      var hasContent = document.getElementById('region-name').value.trim()
+        || document.getElementById('region-desc').value.trim()
+        || document.getElementById('region-detail-desc').value.trim()
+        || (function() {
+          var inputs = document.querySelectorAll('#link-inputs .link-row__input');
+          for (var i = 0; i < inputs.length; i++) { if (inputs[i].value.trim()) return true; }
+          return false;
+        })()
+        || drawnLayers.length > 0
+        || selectedTags.length > 0
+        || getSelectedSourceType();
+      if (!hasContent) return;
+      var draft = {
+        name: document.getElementById('region-name').value,
+        description: document.getElementById('region-desc').value,
+        detailed_description: document.getElementById('region-detail-desc').value,
+        country_id: document.getElementById('region-country').value,
+        // 范围要存进草稿，否则恢复一个「整个国家」的草稿会退回 region 模式，
+        // 再提交时就会因为"没画东西"被拦。
+        scope: currentScope,
+        source_type: getSelectedSourceType(),
+        source_url: getSelectedSourceType() ? document.getElementById('source-url').value.trim() : '',
+        link: (function() {
+          var links = [];
+          var inputs = document.querySelectorAll('#link-inputs .link-row__input');
+          inputs.forEach(function(inp) { var v = inp.value.trim(); if (v) links.push(v); });
+          return links.length > 0 ? links : [];
+        })(),
+        tags: selectedTags.slice(),
+        proposedTags: proposedTags.slice(),
+        geojson: (function() {
+          if (drawnLayers.length === 0) return null;
+          return drawnLayers.map(function(layer) {
+            var raw = layer.toGeoJSON();
+            var geom;
+            if (raw.type === 'FeatureCollection' && raw.features && raw.features.length > 0) {
+              geom = raw.features[0].geometry;
+            } else if (raw.type === 'Feature') {
+              geom = raw.geometry;
+            } else {
+              geom = raw;
+            }
+            var state = arrowStates.get(layer);
+            if (state && state.showArrow && geom.type === 'LineString') {
+              geom.arrow = true;
+            }
+            return geom;
+          });
+        })(),
+      };
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+      } catch(e) { /* storage full or disabled */ }
+    }
+
+    function debouncedSave() {
+      if (saveTimer) clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveDraft, 500);
+    }
+
+    function clearDraft() {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      if (draftKey) {
+        try { localStorage.removeItem(draftKey); } catch(e) { /* ok */ }
+        draftKey = null;
+      }
+    }
+
+    window.__draftClear = clearDraft;
+
+    // Wire auto-save after auth resolves
+    if (!window._authReady) return;
+    window._authReady.then(function(user) {
+      if (!user) return;
+      draftKey = getDraftKey(user.id);
+
+      // Check for existing draft (only if not in edit mode)
+      var urlParams = new URLSearchParams(window.location.search);
+      if (!urlParams.get('edit')) {
+        try {
+          var saved = localStorage.getItem(draftKey);
+          if (saved) {
+            var draft = JSON.parse(saved);
+            if (draft && typeof draft === 'object') {
+            // Show restore bar
+            var bar = document.createElement('div');
+            bar.id = 'draft-restore-bar';
+            bar.style.cssText = 'background:#fff3e0;border:1px solid #ffcc80;border-radius:4px;padding:10px 16px;margin-bottom:16px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;';
+            bar.innerHTML = '<span style="font-size:13px;color:#e65100;">You have an unsaved draft.</span>'
+              + '<span>'
+              + '<button id="draft-restore-btn" class="modal-btn btn-draft--restore">Restore</button>'
+              + '<button id="draft-discard-btn" class="modal-btn modal-btn--ghost">Discard</button>'
+              + '</span>';
+            var form = document.querySelector('.submit-layout__form');
+            form.insertBefore(bar, form.firstChild);
+
+            document.getElementById('draft-restore-btn').addEventListener('click', function() {
+              document.getElementById('region-name').value = draft.name || '';
+              document.getElementById('region-desc').value = draft.description || '';
+              document.getElementById('region-detail-desc').value = draft.detailed_description || '';
+              document.getElementById('region-country').value = draft.country_id || 'south-africa';
+              // 范围先于几何恢复：setScope 会调整标签文案、置灰遮罩与形状列表，
+              // 放在几何恢复之前，后面那段落库形状的代码才落在正确的模式下。
+              // 老草稿没有 scope 字段 → 落回 'region'，与它们被创建时的行为一致。
+              setScope(draft.scope === 'country' ? 'country' : 'region');
+              var scopeInput = document.querySelector('.scope-choice__opt input[value="' + currentScope + '"]');
+              if (scopeInput) scopeInput.checked = true;
+              // Restore the optional source attribution
+              applySource(draft.source_type || '', draft.source_url || '');
+              // Restore link rows from draft
+              var linksToRestore = [];
+              if (Array.isArray(draft.link)) {
+                linksToRestore = draft.link;
+              } else if (typeof draft.link === 'string' && draft.link) {
+                linksToRestore = [draft.link];
+              }
+              var lc = document.getElementById('link-inputs');
+              if (lc && linksToRestore.length > 0) {
+                lc.innerHTML = '';
+                linkResolveStates = [];
+                linksToRestore.forEach(function(linkUrl, i) {
+                  var row = createLinkRow(i);
+                  lc.appendChild(row);
+                  row.querySelector('.link-row__input').value = linkUrl;
+                  linkResolveStates.push({ status: 'idle', streetview: null, _active: true });
+                });
+                reindexLinkRows();
+              }
+              if (draft.tags && Array.isArray(draft.tags)) {
+                selectedTags = normalizeLegacyTags(draft.tags);
+                updateSelectedDisplay();
+              }
+              if (draft.proposedTags && Array.isArray(draft.proposedTags)) {
+                proposedTags = draft.proposedTags.slice();
+                updateProposedDisplay();
+              }
+              if (draft.geojson && Array.isArray(draft.geojson) && draft.geojson.length > 0) {
+                drawnLayers = [];
+                arrowStates.clear();
+
+                draft.geojson.forEach(function(geom) {
+                  if (!geom || !geom.type) return;
+                  var layer = L.geoJSON(geom, { pmIgnore: false }).addTo(map);
+                  if (layer.pm) { layer.pm.enable(); }
+                  drawnLayers.push(layer);
+
+                  var isLine = geom.type === 'LineString';
+                  var hasArrow = isLine && (geom.arrow === true || (geom.properties && geom.properties.arrow === true));
+                  arrowStates.set(layer, { showArrow: hasArrow, decorator: null });
+
+                  if (hasArrow) {
+                    layer.eachLayer(function(l) {
+                      if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+                        var state = arrowStates.get(layer);
+                        state.decorator = createArrowDecorator(l, layer);
+                      }
+                    });
+                  }
+                });
+
+                renderShapeList();
+
+                if (drawnLayers.length > 0) {
+                  try {
+                    var allBounds = drawnLayers[0].getBounds();
+                    for (var i = 1; i < drawnLayers.length; i++) {
+                      allBounds.extend(drawnLayers[i].getBounds());
+                    }
+                    map.fitBounds(allBounds, { padding: [30, 30] });
+                  } catch(e) { /* bounds error */ }
+                }
+              } else if (draft.geojson && draft.geojson.type) {
+                // Legacy draft: single geometry object from old format
+                var layer = L.geoJSON(draft.geojson, { pmIgnore: false }).addTo(map);
+                if (layer.pm) { layer.pm.enable(); }
+                drawnLayers = [layer];
+                arrowStates.set(layer, { showArrow: false, decorator: null });
+
+                if ((draft.showArrow || (draft.geojson.properties && draft.geojson.properties.arrow === true)) && draft.geojson.type === 'LineString') {
+                  layer.eachLayer(function(l) {
+                    if (l instanceof L.Polyline && !(l instanceof L.Polygon)) {
+                      var state = arrowStates.get(layer);
+                      state.showArrow = true;
+                      state.decorator = createArrowDecorator(l, layer);
+                    }
+                  });
+                }
+
+                renderShapeList();
+
+                try {
+                  map.fitBounds(layer.getBounds(), { padding: [30, 30] });
+                } catch(e) { /* bounds error */ }
+              }
+              bar.remove();
+            });
+
+            document.getElementById('draft-discard-btn').addEventListener('click', function() {
+              clearDraft();
+              bar.remove();
+            });
+            }
+          }
+        } catch(e) { /* corrupt draft, ignore */ }
+      }
+
+      // Attach input listeners for auto-save
+      ['region-name', 'region-desc', 'region-country'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', debouncedSave);
+          el.addEventListener('change', debouncedSave);
+        }
+      });
+
+      // Listen to link row inputs for auto-save (delegated on container)
+      var linkInputsContainer = document.getElementById('link-inputs');
+      if (linkInputsContainer) {
+        linkInputsContainer.addEventListener('input', function(e) {
+          if (e.target.classList.contains('link-row__input')) debouncedSave();
+        });
+        linkInputsContainer.addEventListener('change', function(e) {
+          if (e.target.classList.contains('link-row__input')) debouncedSave();
+        });
+      }
+
+      // Hook into selectedTags changes — call after updateSelectedDisplay
+      var _origUpdateSelected = updateSelectedDisplay;
+      updateSelectedDisplay = function() {
+        _origUpdateSelected();
+        debouncedSave();
+      };
+    });
+  })();
+  </script>
+<script>(function(){var p=location.pathname;fetch('/api/pageview?page='+encodeURIComponent(p),{method:'POST'})})();</script>
+</body>
+</html>

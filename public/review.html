@@ -1,0 +1,3127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Review — GeoGuide</title>
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMjgiIGZpbGw9IiM0QTdDNTkiIHN0cm9rZT0iIzNCNjA0NyIgc3Ryb2tlLXdpZHRoPSIyLjUiLz48ZWxsaXBzZSBjeD0iMzIiIGN5PSIzMiIgcng9IjEyIiByeT0iMjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhEQkY5QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG9wYWNpdHk9IjAuNyIvPjxsaW5lIHgxPSI0IiB5MT0iMzIiIHgyPSI2MCIgeTI9IjMyIiBzdHJva2U9IiM4REJGOUEiIHN0cm9rZS13aWR0aD0iMS44IiBvcGFjaXR5PSIwLjciLz48cGF0aCBkPSJNMzIgMTZjLTYgMC0xMSA0LjUtMTEgMTAgMCA3LjUgMTEgMjIgMTEgMjJzMTEtMTQuNSAxMS0yMmMwLTUuNS01LTEwLTExLTEweiIgZmlsbD0iI0Y0RDM1RSIgc3Ryb2tlPSIjQzRBNTJBIiBzdHJva2Utd2lkdGg9IjEuOCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMjYiIHI9IjQiIGZpbGw9IiNDNEE1MkEiLz48L3N2Zz4=">
+  <!-- Warm up the CDN origins this page actually fetches from. Scripts are load-time and
+       block parsing, so they get a full preconnect (no `crossorigin` — classic <script> is a
+       no-cors fetch, and adding it would open a second, unused connection). Image origins are
+       only needed once content renders, so they get dns-prefetch instead of a connection that
+       would sit idle and be reaped. Credit links in the footer point at domains this page never
+       requests — they are deliberately absent. -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <link rel="dns-prefetch" href="https://flagcdn.com" />
+  <script src="js/theme.js?v=3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css?v=171" />
+  <style>
+    .review-item__edit-form { margin-top: 8px; }
+    .review-item__edit-form input, .review-item__edit-form textarea { width: 100%; padding: 6px 8px; border: 1px solid var(--border-warm,#e0d8cc); border-radius: 4px; font-size: 13px; font-family: var(--font-body); margin-bottom: 6px; box-sizing: border-box; }
+    .review-item__edit-form textarea { resize: vertical; min-height: 60px; }
+    .country-drag-handle { user-select: none; }
+    .country-row--ghost { opacity: 0.4; background: rgba(var(--soil-rgb), 0.15); }
+    .country-row--dragging { opacity: 0.6; background: var(--paper-light,#faf8f5); box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
+    .review-item__edit-form .edit-actions { display: flex; gap: 6px; }
+    .review-item__edit-form .edit-actions button { padding: 4px 12px; border-radius: 4px; font-size: 13px; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+    .edit-btn--save { background: var(--soil-dark,#4a7c59); color: #fff; border: none; }
+    .edit-btn--cancel { background: transparent; color: var(--ink-faded,#888); border: 1px solid var(--border-warm,#e0d8cc); }
+    .review-btn--delete:hover { background: var(--red-fill); color: #fff; border-color: var(--red-fill); }
+    .tag-chip button:hover { opacity: 0.7; }
+    .review-item__flagged-badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      background: #FFF3CD;
+      color: #856404;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+    .review-item__flagged-icon {
+      width: 12px;
+      height: 12px;
+      vertical-align: -1px;
+      margin-right: 1px;
+    }
+    .analytics-loading { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-faded,#888); white-space: nowrap; }
+    .analytics-loading[hidden] { display: none; }
+    .analytics-loading__spinner { width: 14px; height: 14px; border: 2px solid var(--border-warm,#e0d8cc); border-top-color: var(--soil-dark,#4a7c59); border-radius: 50%; animation: analytics-spin 0.7s linear infinite; }
+    @keyframes analytics-spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body class="allow-scroll">
+  <nav class="nav">
+    <a href="/" class="nav__logo">GeoGuide</a>
+  </nav>
+
+  <div class="review-layout" id="review-main" hidden>
+    <h1>Admin Review</h1>
+    <div class="review-tabs" id="review-tabs">
+      <div class="review-tabs__row review-tabs__row--primary" id="primary-tabs">
+        <button class="review-tab review-tab--primary" data-module="countries">Countries</button>
+        <button class="review-tab review-tab--primary is-active" data-module="submissions">Submissions</button>
+        <button class="review-tab review-tab--primary" data-module="tags">Tag Management</button>
+        <button class="review-tab review-tab--primary" data-module="users">Users</button>
+        <button class="review-tab review-tab--primary" data-module="audit">Audit Log</button>
+        <button class="review-tab review-tab--primary" data-module="analytics">Analytics</button>
+        <button class="review-tab review-tab--primary" data-module="notes">Notes</button>
+      </div>
+      <div class="review-tabs__row review-tabs__row--secondary" id="country-tabs">
+        <!-- Populated dynamically from /api/countries -->
+      </div>
+      <div class="review-tabs__row review-tabs__row--secondary" id="status-tabs">
+        <button class="review-tab is-active" data-status="pending">Pending</button>
+        <button class="review-tab" data-status="approved">Approved</button>
+        <button class="review-tab" data-status="rejected">Rejected</button>
+        <button class="review-tab" data-status="flagged">Flagged</button>
+        <button class="review-tab" data-status="trash">Trash</button>
+        <label id="select-all-label" class="batch-select-all" style="display:none">
+          <input type="checkbox" id="select-all-checkbox" /> Select All
+        </label>
+      </div>
+    </div>
+    <div class="review-search" id="review-search-bar" style="margin:12px 0;">
+      <input type="search" id="review-search" placeholder="Search by name or submitter…" style="padding:8px 12px;border:1px solid var(--border-warm,#e0d8cc);border-radius:6px;background:var(--surface,#fff);color:var(--ink,#333);font-size:16px;width:100%;max-width:280px;min-height:44px;outline:none;box-sizing:border-box;">
+      <span id="review-search-count" style="font-size:12px;color:var(--ink-faded,#888);margin-left:8px;display:none;"></span>
+      <button type="button" id="review-reload-btn" class="review-reload-btn"
+              title="Reload submissions for the current filter"
+              aria-label="Reload submissions for the current filter">↻</button>
+    </div>
+    <div id="review-list"></div>
+    <div id="batch-bar" class="batch-bar" hidden>
+      <span class="batch-bar__count" id="batch-count">0 selected</span>
+      <button class="review-btn--approve" id="batch-approve-btn">Approve</button>
+      <button class="review-btn--reject" id="batch-reject-btn">Reject</button>
+      <button class="review-btn--undo" id="batch-clear-btn">Clear</button>
+    </div>
+    <div id="user-list" hidden>
+      <div class="review-layout__inner" style="max-width:700px;margin:0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px;">
+          <h2 id="user-count" style="margin:0;"></h2>
+          <button type="button" id="users-reload-btn" class="review-reload-btn"
+                  title="Reload users" aria-label="Reload users">↻</button>
+        </div>
+        <div id="user-grid"></div>
+      </div>
+    </div>
+    <div id="audit-log" hidden>
+      <div class="review-layout__inner" style="max-width:700px;margin:0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px;">
+          <h2 style="margin:0;">Audit Log</h2>
+          <button type="button" id="audit-reload-btn" class="review-reload-btn"
+                  title="Reload audit log" aria-label="Reload audit log">↻</button>
+        </div>
+        <div id="audit-log-list"></div>
+      </div>
+    </div>
+    <div id="country-manager" hidden>
+      <div class="review-layout__inner" style="max-width:900px;margin:0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <h2 style="margin:0;">Country Management</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" id="countries-reload-btn" class="review-reload-btn"
+                  title="Reload countries and proposals" aria-label="Reload countries and proposals">↻</button>
+            <button id="add-country-btn" class="review-btn--approve">+ Add Country</button>
+          </div>
+        </div>
+        <div id="country-form-row" style="display:none;margin-bottom:16px;padding:12px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">ID (slug)</label><input id="cf-id" type="text" placeholder="japan" style="width:120px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">Name</label><input id="cf-name" type="text" placeholder="Japan" style="width:140px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">Flag (ISO)</label><input id="cf-flag" type="text" placeholder="jp" style="width:80px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">S (South)</label><input id="cf-sw-lat" type="number" step="0.1" style="width:80px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">W (West)</label><input id="cf-sw-lng" type="number" step="0.1" style="width:80px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">N (North)</label><input id="cf-ne-lat" type="number" step="0.1" style="width:80px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">E (East)</label><input id="cf-ne-lng" type="number" step="0.1" style="width:80px;" /></div>
+            <div><label style="display:block;font-size:12px;margin-bottom:2px;">Active</label><input id="cf-active" type="checkbox" checked style="width:20px;height:20px;" /></div>
+            <button id="cf-save-btn" class="review-btn--approve">Save</button>
+            <button id="cf-cancel-btn" class="review-btn--undo">Cancel</button>
+            <div id="cf-prefill-hint" style="flex-basis:100%;font-size:12px;color:var(--ink-faded);min-height:15px;"></div>
+          </div>
+        </div>
+        <div id="country-table-wrapper" style="overflow-x:auto;">
+          <table id="country-table" style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border-warm);">
+                <th style="padding:8px;text-align:left;width:36px;"></th>
+                <th style="padding:8px;text-align:left;">Flag</th>
+                <th style="padding:8px;text-align:left;">Name</th>
+                <th style="padding:8px;text-align:left;">Regions</th>
+                <th style="padding:8px;text-align:left;">Active</th>
+                <th style="padding:8px;text-align:left;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="country-table-body"></tbody>
+          </table>
+        </div>
+        <div id="country-proposals-wrapper" style="margin-top:40px;overflow-x:auto;" hidden>
+          <h2 style="margin:0 0 16px 0;">User Proposals</h2>
+          <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <button type="button" class="review-tab is-active" id="proposal-filter-pending">Pending</button>
+            <button type="button" class="review-tab" id="proposal-filter-exists">Already exists</button>
+          </div>
+          <table id="country-proposals-table" style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="border-bottom:2px solid var(--border-warm);">
+                <th style="padding:8px;text-align:left;">Name</th>
+                <th style="padding:8px;text-align:left;">Type</th>
+                <th style="padding:8px;text-align:left;">Votes</th>
+                <th style="padding:8px;text-align:left;">Proposers</th>
+                <th style="padding:8px;text-align:left;">Meta</th>
+                <th style="padding:8px;text-align:left;">Latest</th>
+                <th style="padding:8px;text-align:left;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="country-proposals-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="notes-panel" hidden>
+      <div class="review-layout__inner" style="max-width:700px;margin:0 auto;">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:16px;">
+          <h2 style="margin:0;">Country Notes</h2>
+          <button type="button" id="notes-reload-btn" class="review-reload-btn"
+                  title="Reload notes" aria-label="Reload notes">↻</button>
+        </div>
+        <div id="notes-list"></div>
+      </div>
+    </div>
+    <div id="tag-manager" hidden>
+      <div class="tag-manager">
+        <section class="tag-manager__section">
+          <!-- reload 与标题同行、贴最右(形状对齐 users/audit/notes/countries/analytics 五个面板)。
+               本面板没有 h2 标题，所以借第一个 section 的 h3 当标题行。 -->
+          <div class="tag-manager__heading">
+            <h3>Create Category</h3>
+            <button type="button" id="tags-reload-btn" class="review-reload-btn"
+                    title="Reload the tag catalog" aria-label="Reload the tag catalog">↻</button>
+          </div>
+          <div class="tag-manager__row">
+            <input type="text" id="new-category-name" placeholder="Category name" />
+            <button id="create-category-btn">Create</button>
+          </div>
+        </section>
+
+        <section class="tag-manager__section">
+          <h3>Add Tags to Category</h3>
+          <div class="tag-manager__row">
+            <select id="batch-category-select">
+              <option value="">-- Select category --</option>
+            </select>
+          </div>
+          <textarea id="batch-tag-names" placeholder="Paste tag names, one per line" rows="5"></textarea>
+          <button id="add-tags-btn">Add Tags</button>
+        </section>
+
+        <section class="tag-manager__section">
+          <h3>Existing Categories</h3>
+          <div id="categories-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics panel -->
+  <div id="analytics-panel" hidden>
+    <div class="review-layout__inner" style="max-width:720px;margin:0 auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <h2 style="margin:0;">Analytics</h2>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <select id="analytics-range" onchange="loadAnalytics()" style="padding:6px 10px;border:1px solid var(--border-warm);border-radius:4px;font-size:13px;">
+            <option value="7d">Last 7 days</option>
+            <option value="30d" selected>Last 30 days</option>
+            <option value="90d">Last 90 days</option>
+            <option value="all">All time</option>
+          </select>
+          <button type="button" id="analytics-reload-btn" class="review-reload-btn"
+                  title="Reload analytics for the selected range" aria-label="Reload analytics for the selected range">↻</button>
+          <span id="analytics-loading" class="analytics-loading" hidden aria-live="polite">
+            <span class="analytics-loading__spinner" aria-hidden="true"></span>
+            <span>Loading…</span>
+          </span>
+        </div>
+      </div>
+
+      <p id="analytics-error" hidden role="alert" style="color:var(--feedback-red);font-size:13px;margin:0 0 16px;"></p>
+
+      <div class="analytics-cards" style="display:flex;gap:14px;margin-bottom:24px;flex-wrap:wrap;">
+        <div class="analytics-card" id="ac-total" style="flex:1;min-width:100px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:700;color:var(--soil-dark);" id="stat-total">—</div>
+          <div style="font-size:12px;color:var(--ink-faded);margin-top:4px;">Total Views</div>
+        </div>
+        <div class="analytics-card" id="ac-unique" style="flex:1;min-width:100px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:700;color:var(--soil-dark);" id="stat-unique">—</div>
+          <div style="font-size:12px;color:var(--ink-faded);margin-top:4px;">Unique IPs</div>
+        </div>
+        <div class="analytics-card" id="ac-today" style="flex:1;min-width:100px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;text-align:center;">
+          <div style="font-size:28px;font-weight:700;color:var(--soil-dark);" id="stat-today">—</div>
+          <div style="font-size:12px;color:var(--ink-faded);margin-top:4px;">Today</div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:24px;margin-bottom:24px;flex-wrap:wrap;">
+        <div style="flex:2;min-width:280px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;">
+          <h3 style="margin:0 0 12px;font-size:14px;">Daily Views</h3>
+          <div style="position:relative;height:220px;"><canvas id="daily-chart"></canvas></div>
+        </div>
+        <div style="flex:1;min-width:200px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;">
+          <h3 style="margin:0 0 12px;font-size:14px;">Devices</h3>
+          <div style="position:relative;height:220px;"><canvas id="device-chart"></canvas></div>
+        </div>
+      </div>
+
+      <div style="background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;margin-bottom:24px;">
+        <h3 style="margin:0 0 12px;font-size:14px;">Top Pages</h3>
+        <div id="top-pages-list"></div>
+      </div>
+
+      <div style="background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;margin-bottom:24px;">
+        <h3 style="margin:0 0 12px;font-size:14px;">Visitors</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="visitors-table">
+            <thead><tr style="border-bottom:1px solid var(--border-warm);">
+              <th style="padding:6px 8px;text-align:left;">User</th>
+              <th style="padding:6px 8px;text-align:left;cursor:pointer;user-select:none;" id="visitors-sort-visits">Visits <span class="sort-arrow"></span></th>
+              <th style="padding:6px 8px;text-align:left;cursor:pointer;user-select:none;" id="visitors-sort-last">Last Visit <span class="sort-arrow">▼</span></th>
+            </tr></thead>
+            <tbody id="visitors-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;padding:16px;margin-bottom:24px;">
+        <h3 style="margin:0 0 12px;font-size:14px;">Recent Visitors</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:12px;" id="recent-table">
+            <thead><tr style="border-bottom:1px solid var(--border-warm);">
+              <th style="padding:6px 8px;text-align:left;">Time</th>
+              <th style="padding:6px 8px;text-align:left;">Page</th>
+              <th style="padding:6px 8px;text-align:left;">User</th>
+            </tr></thead>
+            <tbody id="recent-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="review-auth" id="review-auth" hidden>
+    <h2>Access Denied</h2>
+    <p>You need admin access to view this page.</p>
+    <a href="/api/auth?action=login" class="nav__link--login" style="display:inline-block;">Login with Discord</a>
+  </div>
+
+  <div class="review-auth" id="review-password-gate" hidden style="text-align:center;padding:80px 20px;max-width:360px;margin:0 auto;">
+    <h2 style="font-family:var(--font-display);margin-bottom:8px;">Admin Password</h2>
+    <p style="color:var(--ink-faded);margin-bottom:16px;">Enter the admin password to unlock the review panel.</p>
+    <input type="password" id="admin-password-input" placeholder="Admin password"
+           style="width:100%;padding:10px 14px;border:1px solid var(--border-warm,#e0d8cc);border-radius:var(--radius);font-size:14px;font-family:var(--font-body);margin-bottom:12px;"
+           autocomplete="off" />
+    <div class="form-feedback is-error" id="pw-error" style="display:none;margin-bottom:8px;"></div>
+    <button id="admin-password-submit" class="form-submit" style="width:100%;">Unlock</button>
+  </div>
+
+  <script src="js/auth.js?v=12"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/utils.js?v=28"></script>
+  <script>
+    // Lazy-load a script on demand — avoids blocking page load with libraries
+    // the user may never need (e.g. Chart.js only on the Analytics tab).
+    var _scriptCache = {};
+    // 懒加载的第三方库。URL 只写一处：调用点分散在预加载和各 loader 里，抄第二遍就是下一个
+    // 会漂移的同步点（本仓库已有 SOURCE_RULES 与 OSM 瓦片 URL 两处前车之鉴）。
+    var CHART_JS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+    function _loadScript(src) {
+      if (_scriptCache[src]) return _scriptCache[src];
+      var p = new Promise(function(resolve, reject) {
+        var s = document.createElement('script');
+        s.src = src;
+        s.onload = function() { resolve(); };
+        s.onerror = function() { reject(new Error('Failed to load ' + src)); };
+        document.head.appendChild(s);
+      });
+      _scriptCache[src] = p;
+      // ⚠️ 失败必须从缓存里摘掉。留着的话，一次 CDN 抖动就把这个 URL 在这张页面上**永久钉死**：
+      // 之后每次 _loadScript 都拿到同一个已拒绝的 promise，既不重新请求也不报错。症状是
+      // 懒加载的库没到位就再也修不回来 —— 连 Reload 按钮点了都毫无反应，只能整页刷新。
+      p.catch(function() { delete _scriptCache[src]; });
+      return p;
+    }
+  </script>
+  <script>
+    // Show password gate immediately — don't wait for /api/auth?action=me
+    document.getElementById('review-password-gate').hidden = false;
+
+    // ── 数据缓存 ──────────────────────────────────────────────────────────────
+    // 每个模块的数据按 key 常驻在这里：命中就渲染、不再回网络，只有 invalidate() 会移除条目。
+    // 以前这里是 `_preload` —— 一次性 handoff（读到就 delete），所以同一个标签页第二次点开
+    // 必然重新请求，且切走再切回会重跑一次 `innerHTML = 'Loading...'`。
+    var _cache = {};   // key -> { promise: Promise, data: any }
+    var _shown = {};   // viewId -> 此刻**真正渲染在那个容器里**的 key
+
+    // _shown 记的是「容器里装着谁」，不是「谁渲染过」。这个区别是必须的：
+    // submissions 的六个筛选组合（pending|all、approved|all、pending|japan……）共用同一个
+    // #review-list。若按「渲染过」记，切到 Approved 再切回 Pending 时，守卫会以为 pending
+    // 已经渲染过而整个跳过 —— 容器里装的却还是 Approved 的内容，用户看到的是错的列表。
+    // 同理：proposals 的 pending/exists 共用一个 tbody，analytics 的各 range 共用一个面板。
+
+    // flagged 徽章的一格（图标 + 计数）。图标从 utils.js 的 GEOGUIDE_REACTIONS 取
+    // （reactionIconSrc 是唯一出口）—— **不要在这里硬编码 emoji**：本次把系统 emoji
+    // 换成 Twemoji SVG 后，硬编码的那份必然漂移（R3）。
+    // 三个 type 与后端 flagged SQL 的 IN ('useless','wrong','error') 对齐（api/review.js:42）；
+    // 阈值 5 / 5 / 1 是第二份硬编码，在 api/review.js:48，**本次不动**。
+    function flaggedBadgePart(key, count) {
+      var src = reactionIconSrc(key);
+      var icon = src
+        ? '<img class="review-item__flagged-icon" src="' + src + '" alt="" aria-hidden="true">'
+        : '';
+      // 图标是装饰（alt=""），数字单独一个 "7" 对读屏器没有含义 —— 换成 Twemoji 之后，
+      // 原本 emoji 字符自带的含义（"thumbs down"）没了。所以要像 buildReactionCounts
+      // 那样给整格补 role="img" + aria-label：**装饰性图标必须配一个文字替代**。
+      var meta = null;
+      for (var i = 0; i < GEOGUIDE_REACTIONS.length; i++) {
+        if (GEOGUIDE_REACTIONS[i].key === key) { meta = GEOGUIDE_REACTIONS[i]; break; }
+      }
+      var name = count + ' ' + (meta ? meta.label : key);
+      return '<span class="review-item__flagged-part" role="img" aria-label="' + name + '">'
+        + icon + count + '</span>';
+    }
+
+    // cache 与 _shown 必须同生共死：只清 cache 不清 _shown，下次点进去会既不请求也不渲染。
+    function invalidate(key) {
+      delete _cache[key];
+      Object.keys(_shown).forEach(function(v) { if (_shown[v] === key) delete _shown[v]; });
+    }
+
+    // 401 的处置权在各 loader 手里（submissions 整页刷新、users/audit 就地显示 Access denied），
+    // 解析器只把它标成 unauthorized，**并带上来源**。
+    //
+    // 这个来源标记不是装饰：预加载发生在密码门之前，那时的 401 只说明「还没授权」，不代表会话
+    // 过期；而预加载的 promise 会与解锁后的第一次加载**共享同一个对象**，解析器早已在 preload
+    // 语义下跑完。所以解锁瞬间那个 rejection 到达 loader 的 catch 时，必须还能看出它来自预加载，
+    // 否则会把正常的一次预加载失败误判成会话失效而整页刷新。
+    function unauthorizedError(opts) {
+      var e = new Error('unauthorized');
+      e.preload = !!(opts && opts.preload);
+      return e;
+    }
+
+    // 各 loader 的 catch 用它判断「该不该当作会话过期处理」。
+    function isSessionExpired(e) {
+      return !!e && e.message === 'unauthorized' && !e.preload;
+    }
+
+    function parseJSON(r, opts) {
+      if (r.status === 401) throw unauthorizedError(opts);
+      if (!r.ok) throw new Error('Server error: ' + r.status);
+      return r.json();
+    }
+
+    // submissions 专用：多一层 step 错误文案（搬自 loadSubmissions 原来的取数链）。
+    function parseReviewList(r, opts) {
+      if (r.status === 401) throw unauthorizedError(opts);
+      if (!r.ok) {
+        return r.json().then(function(body) {
+          throw new Error(body.step ? 'Step ' + body.step + ' failed: ' + body.error : 'Server error: ' + r.status);
+        }).catch(function(e) {
+          if (e.message.indexOf('Step') > -1 || e.message.indexOf('Server error') > -1) throw e;
+          throw new Error('Server error: ' + r.status);
+        });
+      }
+      return r.json();
+    }
+
+    // 命中缓存直接返回；未命中才发请求，并把结果写回 —— 所以第三次点击同样免网络。
+    //   parse(r, opts) 负责检查 HTTP 状态并整形数据，抛错即视为失败
+    //   opts.noStore   带 cache:'no-store'（submissions 原有行为）
+    function fetchOnce(key, url, parse, opts) {
+      var entry = _cache[key];
+      if (entry) return entry.promise;
+      opts = opts || {};
+      entry = _cache[key] = { promise: null, data: null };
+      entry.promise = fetch(url, opts.noStore ? { cache: 'no-store' } : undefined)
+        .then(function(r) { return parse(r, opts); })
+        .then(function(data) { entry.data = data; return data; })
+        .catch(function(e) {
+          // 失败绝不能留在缓存里：一次网络抖动被记住之后，用户再点也不会重试。
+          invalidate(key);
+          throw e;
+        });
+      return entry.promise;
+    }
+
+    // 声明「这个容器现在装的就是这个 key」，下次带 reuse 切回来就不重跑渲染（否则仍会闪 Loading）。
+    function markShown(viewId, key) { _shown[viewId] = key; }
+
+    // 通过/拒绝成功后：把条目从当前筛选的缓存里摘掉，再用改过的缓存重渲染。
+    // 全程零网络、不出现 Loading —— 这就是「审批后沿用之前的」的落点。
+    //
+    // 「摘掉」是对的语义：当前筛选是 pending，通过之后它不再是 pending，本来就不该留在列表里。
+    //
+    // 失效范围（用户定的）：只作废 submissions 自己的其它筛选页，它们下次点进去时重拉一次 ——
+    // 否则切到 Approved 会看不到刚批的条目。其余模块（users / audit / analytics / notes /
+    // countries）不会被审批影响，继续吃缓存。tags 也**不**作废：通过标签提案理论上会让它
+    // 多出几条 tag，用户明确表示不管，需要时自己点 Reload。
+    function dropFromSubmissionsCache(ids) {
+      var key = submissionsKey(currentStatus, currentCountry);
+      // 一律按字符串比。批量路径的 id 来自 Object.keys(batchSelected) —— 对象键永远是字符串
+      // （"1"），而 API 回来的 s.id 是数字（1）。直接 indexOf 比会**一条都匹配不上**，
+      // 摘除静默失效：批量通过后列表原样不动，看起来像按钮坏了。
+      var drop = {};
+      ids.forEach(function(id) { drop[String(id)] = true; });
+      var entry = _cache[key];
+      if (entry && entry.data && entry.data.submissions) {
+        entry.data.submissions = entry.data.submissions.filter(function(s) {
+          return !drop[String(s.id)];
+        });
+      }
+      Object.keys(_cache).forEach(function(k) {
+        if (k.indexOf('submissions|') === 0 && k !== key) invalidate(k);
+      });
+      // 缓存是就地改的、不是重新取的 —— 必须把「已渲染」标记清掉放行守卫，
+      // 否则 loadSubmissions 会认为没事可做，摘除的效果永远不上屏。
+      delete _shown['submissions'];
+      return loadSubmissions(currentStatus, currentCountry, { reuse: true });
+    }
+
+    // 每个 loader 的第一句。返回 true 表示「已渲染过，本次什么都不用做」。
+    //
+    // 语义是**反**的：不带 opts 就当「数据可能已经变了」——先失效再取，也就是改动前的行为。
+    // 只有导航类调用（切标签页、切筛选）才传 { reuse: true }，那条路上命中已渲染的缓存就整个
+    // 跳过，不发请求也不重排 DOM。
+    //
+    // 之所以反过来，是因为「改完之后重新加载」的调用点有四十来个（建标签、改国家、调角色、
+    // 删笔记……），它们全都靠重取才能看见刚改的东西。默认改成 reuse 的话，这四十处会集体
+    // 静默失效——守卫让它们什么都不做，就算不守卫，fetchOnce 也只会把旧缓存端回去。
+    function skipIfCached(viewId, key, opts) {
+      if (opts && opts.reuse) return _shown[viewId] === key;
+      invalidate(key);
+      return false;
+    }
+
+    // submissions 的 key 只在这里拼。摘除/失效若自己拼一遍，拼错了会静默落到不存在的 key 上。
+    function submissionsKey(status, country) {
+      return 'submissions|' + status + '|' + (country || 'all');
+    }
+
+    // Leaflet 全页只加载一次，且**保留 promise**：小地图的绘制必须等它就绪，不能撞运气。
+    // 见 mapObserver 那段的长注释。
+    function ensureLeaflet() {
+      return _loadScript('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js').catch(function() {});
+    }
+
+    // Preload everything needed after unlock while user types password.
+    // 键与各 loader 完全一致（所以解锁后第一次点击直接命中），且走的是同一套解析路径 ——
+    // 旧写法这里只 .then(r => r.json())，与 loadSubmissions 的 step 错误解析本就不一致。
+    // 失败的条目会被 fetchOnce 就地删掉，解锁后的第一次加载会重新请求，不需要额外的 catch。
+    ensureLeaflet();
+    fetchOnce('submissions|pending|all', '/api/review?status=pending', parseReviewList, { preload: true }).catch(function(){});
+    fetchOnce('countries', '/api/countries?admin=1', parseJSON, { preload: true }).catch(function(){});
+    fetchOnce('countries|proposals|pending', '/api/countries?admin=1&proposal_status=pending', parseJSON, { preload: true }).catch(function(){});
+    fetchOnce('tags', '/api/tags', parseJSON, { preload: true }).catch(function(){});
+    fetchOnce('users', '/api/users', parseJSON, { preload: true }).catch(function(){});
+    fetchOnce('audit', '/api/users?type=audit_logs', parseJSON, { preload: true }).catch(function(){});
+    fetchOnce('notes', '/api/review?status=pending', parseJSON, { preload: true }).catch(function(){});
+    fetchOnce('analytics|30d', '/api/pageview?action=stats&range=30d', parseJSON, { preload: true }).catch(function(){});
+    // Preload Chart.js alongside so the Analytics tab paints as soon as it opens
+    _loadScript(CHART_JS_SRC).catch(function(){});
+
+    document.getElementById('admin-password-submit').addEventListener('click', function() {
+      var pw = document.getElementById('admin-password-input').value;
+      var err = document.getElementById('pw-error');
+      var btn = document.getElementById('admin-password-submit');
+      if (!pw) { err.textContent = 'Please enter the admin password.'; err.style.display = 'block'; return; }
+      btn.disabled = true;
+      btn.textContent = 'Verifying...';
+      err.style.display = 'none';
+          fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+            body: JSON.stringify({ action: 'admin-auth', password: pw })
+          })
+          .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+          .then(function(result) {
+            if (!result.ok) {
+              err.textContent = result.data.error || 'Invalid password';
+              err.style.display = 'block';
+              btn.disabled = false;
+              btn.textContent = 'Unlock';
+              return;
+            }
+            document.getElementById('review-password-gate').hidden = true;
+            document.getElementById('review-main').hidden = false;
+            renderCountryTabs();
+            // reuse：把解锁前发起的预加载接上。用默认语义会先失效掉它，等于白预加载。
+            loadSubmissions('pending', 'all', { reuse: true });
+          })
+          .catch(function(e) {
+            err.textContent = 'Network error: ' + e.message;
+            err.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Unlock';
+          });
+        });
+    document.getElementById('admin-password-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('admin-password-submit').click();
+    });
+
+    // Background check: if user isn't admin, hide gate and show error
+    window._authReady.then(function(user) {
+      if (!user || user.role !== 'admin') {
+        document.getElementById('review-password-gate').hidden = true;
+        document.getElementById('review-auth').hidden = false;
+      }
+    });
+
+    var currentModule = 'submissions'; // 'submissions' | 'tags' | 'users' | 'audit' | 'countries' | 'analytics'
+    var currentCountry = 'all';
+    var currentStatus = 'pending';
+    var currentProposalStatus = 'pending'; // 'pending' | 'exists'
+    var _searchQuery = '';
+    var _searchTimer = null;
+
+    function applySearchFilter() {
+      var q = _searchQuery;
+      var items = document.querySelectorAll('#review-list .review-item');
+      var visibleCount = 0;
+      var totalCount = items.length;
+      items.forEach(function(item) {
+        var text = (item.dataset.searchText || '').toLowerCase();
+        var match = !q || text.indexOf(q) !== -1;
+        item.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+      });
+      var countEl = document.getElementById('review-search-count');
+      if (countEl) {
+        if (q) {
+          countEl.textContent = visibleCount + ' / ' + totalCount + ' shown';
+          countEl.style.display = '';
+        } else {
+          countEl.style.display = 'none';
+        }
+      }
+      // If no visible items, show a message
+      var existingMsg = document.getElementById('search-empty-msg');
+      if (q && visibleCount === 0) {
+        if (!existingMsg) {
+          var msg = document.createElement('p');
+          msg.id = 'search-empty-msg';
+          msg.style.cssText = 'color:var(--ink-faded,#888);padding:20px;text-align:center;';
+          msg.textContent = 'No submissions matching "' + q + '"';
+          document.getElementById('review-list').appendChild(msg);
+        } else {
+          existingMsg.textContent = 'No submissions matching "' + q + '"';
+          existingMsg.style.display = '';
+        }
+      } else if (existingMsg) {
+        existingMsg.style.display = 'none';
+      }
+    }
+
+    // Search input handler
+    (function() {
+      var input = document.getElementById('review-search');
+      if (input) {
+        input.addEventListener('input', function() {
+          _searchQuery = this.value.trim().toLowerCase();
+          clearTimeout(_searchTimer);
+          _searchTimer = setTimeout(applySearchFilter, 250);
+        });
+      }
+    })();
+
+    // 模块 Reload 按钮的统一接线：先失效该模块的缓存，再按当前筛选重新加载。
+    // 失效必须显式做 —— loadX() 本身已经会在默认语义下失效，但那只覆盖它自己那一个 key；
+    // countries 的 proposals 是另一个 key，analytics 的 range 也是。
+    //   keys   字符串，或返回字符串数组的函数（analytics 的 key 取决于当前 range）
+    //   reload 实际加载函数，返回 promise 供 disableWhile 用
+    function wireReload(btnId, keys, reload) {
+      var btn = document.getElementById(btnId);
+      if (!btn) return;
+      btn.addEventListener('click', function() {
+        // 函数形态的 keys 返回的可能是**字符串**（单个 key）而非数组 —— 必须先 concat 再
+        // forEach，否则 "xxx".forEach 直接抛 TypeError，按钮点了毫无反应。
+        var list = [].concat(typeof keys === 'function' ? keys() : keys);
+        list.forEach(invalidate);
+        // null = 不换字（按钮只剩一个 ↻），只置灰
+        disableWhile(btn, null, Promise.resolve(reload()));
+      });
+    }
+
+    // 某个模块当前的 key 快照，给 Reload 的失效清单用
+    function currentAnalyticsKey() {
+      return 'analytics|' + document.getElementById('analytics-range').value;
+    }
+    function allProposalKeys() {
+      return ['countries', 'countries|proposals|pending', 'countries|proposals|exists'];
+    }
+
+    wireReload('review-reload-btn', function() { return submissionsKey(currentStatus, currentCountry); },
+      function() { return loadSubmissions(currentStatus, currentCountry); });
+
+    wireReload('countries-reload-btn', allProposalKeys,
+      function() { return loadCountryManager().then(function() { renderCountryTabs(); }); });
+
+    wireReload('tags-reload-btn', 'tags', function() { return loadTagManager(); });
+    wireReload('users-reload-btn', 'users', function() { return loadUsers(); });
+    wireReload('audit-reload-btn', 'audit', function() { return loadAuditLogs(); });
+    wireReload('analytics-reload-btn', currentAnalyticsKey, function() { return loadAnalytics(); });
+    wireReload('notes-reload-btn', 'notes', function() { return loadNotes(); });
+
+    function renderCountryTabs() {
+      var map = window._countryMap;
+      var container = document.getElementById('country-tabs');
+      if (!container) return;
+
+      if (!map || Object.keys(map).length === 0) {
+        window.addEventListener('countries-ready', renderCountryTabs, { once: true });
+        return;
+      }
+
+      container.innerHTML = '';
+
+      // "All" button first
+      var allBtn = document.createElement('button');
+      allBtn.className = 'review-tab is-active';
+      allBtn.dataset.country = 'all';
+      allBtn.textContent = 'All';
+      allBtn.addEventListener('click', function() {
+        if (allBtn.dataset.country === currentCountry) return;
+        container.querySelectorAll('.review-tab').forEach(function(t) { t.classList.remove('is-active'); });
+        allBtn.classList.add('is-active');
+        currentCountry = allBtn.dataset.country;
+        if (currentModule === 'submissions' || currentModule === 'countries') {
+          clearBatchSelection();
+        }
+        if (currentModule === 'submissions') {
+          loadSubmissions(currentStatus, currentCountry, { reuse: true });
+        }
+      });
+      container.appendChild(allBtn);
+
+      var ids = sortCountryIds(map);
+
+      ids.forEach(function(id) {
+        var c = map[id];
+        var btn = document.createElement('button');
+        btn.className = 'review-tab';
+        btn.dataset.country = id;
+        btn.textContent = c.name;
+        btn.addEventListener('click', function() {
+          if (btn.dataset.country === currentCountry) return;
+          container.querySelectorAll('.review-tab').forEach(function(t) { t.classList.remove('is-active'); });
+          btn.classList.add('is-active');
+          currentCountry = btn.dataset.country;
+          if (currentModule === 'submissions' || currentModule === 'countries') {
+            clearBatchSelection();
+          }
+          if (currentModule === 'submissions') {
+            loadSubmissions(currentStatus, currentCountry, { reuse: true });
+          }
+        });
+        container.appendChild(btn);
+      });
+    }
+
+    var batchSelected = {}; // { submissionId: true }
+    var batchBar = null;
+
+    function syncSelectAll() {
+      var allCbs = document.querySelectorAll('.review-item__checkbox input');
+      if (allCbs.length === 0) {
+        document.getElementById('select-all-checkbox').checked = false;
+        return;
+      }
+      var allChecked = true;
+      for (var i = 0; i < allCbs.length; i++) {
+        if (!allCbs[i].checked) { allChecked = false; break; }
+      }
+      document.getElementById('select-all-checkbox').checked = allChecked;
+    }
+
+    function clearBatchSelection() {
+      batchSelected = {};
+      document.getElementById('select-all-checkbox').checked = false;
+      updateBatchBar();
+    }
+
+    // --- Tag proposal batch selection (independent from submission batch) ---
+    // Uses its own checkbox class (.review-item__tag-checkbox) and its own
+    // selection map so the submission batch bar and select-all never see them.
+    var tagBatchSelected = {}; // { tagId: true }
+    var tagBatchBar = null;
+
+    function updateTagBatchBar() {
+      var ids = Object.keys(tagBatchSelected).filter(function(k) { return tagBatchSelected[k]; });
+      var count = ids.length;
+      document.getElementById('tag-batch-count').textContent = count + ' selected';
+      document.getElementById('tag-batch-bar').hidden = count === 0;
+    }
+
+    function clearTagBatchSelection() {
+      tagBatchSelected = {};
+      document.querySelectorAll('.review-item__tag-checkbox input').forEach(function(cb) {
+        cb.checked = false;
+      });
+      var selAll = document.getElementById('tag-select-all-checkbox');
+      if (selAll) selAll.checked = false;
+      var bar = document.getElementById('tag-batch-bar');
+      if (bar) bar.hidden = true;
+    }
+
+    function syncTagSelectAll() {
+      var allCbs = document.querySelectorAll('.review-item__tag-checkbox input');
+      var selAll = document.getElementById('tag-select-all-checkbox');
+      if (!selAll) return;
+      if (allCbs.length === 0) { selAll.checked = false; return; }
+      var allChecked = true;
+      for (var i = 0; i < allCbs.length; i++) {
+        if (!allCbs[i].checked) { allChecked = false; break; }
+      }
+      selAll.checked = allChecked;
+    }
+
+    // Disable a button while a promise is in-flight, then restore it.
+    // Returns the promise so callers can chain .then() / .catch().
+    function disableWhile(btn, text, promise) {
+      // text 传 null = 不换字，只置灰。图标按钮（那七个 Reload，内容只剩一个 ↻）需要这个模式：
+      // 换字会把符号变成一行 "Loading…"，既破坏形态，加载完再换回来还会让按钮宽窄跳一下。
+      var original = text == null ? null : btn.textContent;
+      btn.disabled = true;
+      if (original !== null) btn.textContent = text;
+      btn.style.opacity = '0.6';
+      btn.style.cursor = 'not-allowed';
+      promise.finally(function() {
+        btn.disabled = false;
+        if (original !== null) btn.textContent = original;
+        btn.style.opacity = '';
+        btn.style.cursor = '';
+      });
+      return promise;
+    }
+
+    function showModule(module) {
+      currentModule = module;
+      var isSubmissions = (module === 'submissions');
+      var showCountryTabs = (module === 'submissions');
+      // Show/hide secondary filter rows
+      document.getElementById('country-tabs').style.display = showCountryTabs ? '' : 'none';
+      document.getElementById('status-tabs').style.display = isSubmissions ? '' : 'none';
+      // Show/hide batch UI + search bar
+      document.getElementById('review-search-bar').style.display = isSubmissions ? '' : 'none';
+      if (!isSubmissions) {
+        clearBatchSelection();
+        document.getElementById('batch-bar').hidden = true;
+      }
+      // Show/hide content areas
+      document.getElementById('review-list').hidden = !isSubmissions;
+      document.getElementById('tag-manager').hidden = (module !== 'tags');
+      document.getElementById('user-list').hidden = (module !== 'users');
+      document.getElementById('audit-log').hidden = (module !== 'audit');
+      document.getElementById('country-manager').hidden = (module !== 'countries');
+      document.getElementById('analytics-panel').hidden = (module !== 'analytics');
+      document.getElementById('notes-panel').hidden = (module !== 'notes');
+      // Load content. 这里一律传 { reuse: true }：切标签页是导航，不是「刚改过东西」——
+      // 命中已渲染的缓存就整个跳过，不发请求也不重排 DOM。其余调用点保持默认语义
+      // （先失效再取），所以「改完之后刷新」的那四十来处一处都不用动。
+      var nav = { reuse: true };
+      if (module === 'submissions') {
+        loadSubmissions(currentStatus, currentCountry, nav);
+      } else if (module === 'tags') {
+        loadTagManager(nav);
+      } else if (module === 'users') {
+        loadUsers(nav);
+      } else if (module === 'audit') {
+        loadAuditLogs(nav);
+      } else if (module === 'countries') {
+        loadCountryManager(nav);
+      } else if (module === 'analytics') {
+        loadAnalytics();
+      } else if (module === 'notes') {
+        loadNotes(nav);
+      }
+    }
+
+    var editingCountryId = null;
+
+    function loadCountryManager(opts) {
+      var key = 'countries';
+      if (skipIfCached('countries', key, opts)) return Promise.resolve();
+      // Fire-and-forget: SortableJS loads while the API call is in-flight
+      _loadScript('https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js').catch(function(){});
+
+      return fetchOnce(key, '/api/countries?admin=1', parseJSON)
+        .then(function(data) {
+          window._isSuperAdmin = !!data.is_super_admin;
+          var tbody = document.getElementById('country-table-body');
+          tbody.innerHTML = '';
+          (data.countries || []).forEach(function(c) {
+            var tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-warm)';
+            tr.setAttribute('data-country-id', c.id);
+
+            var handleTd = document.createElement('td');
+            handleTd.style.padding = '8px';
+            handleTd.style.cursor = 'grab';
+            handleTd.style.textAlign = 'center';
+            handleTd.style.color = 'var(--ink-muted)';
+            handleTd.textContent = '⋮⋮';
+            handleTd.className = 'country-drag-handle';
+
+            var flagTd = document.createElement('td');
+            flagTd.style.padding = '8px';
+            var flagImg = document.createElement('img');
+            flagImg.src = 'https://flagcdn.com/w40/' + c.flag + '.png';
+            flagImg.alt = '';
+            flagImg.style.width = '32px';
+            flagImg.style.height = 'auto';
+            flagImg.onerror = function() { this.style.display = 'none'; };
+            flagTd.appendChild(flagImg);
+
+            var nameTd = document.createElement('td');
+            nameTd.style.padding = '8px';
+            nameTd.textContent = c.name;
+
+            var countTd = document.createElement('td');
+            countTd.style.padding = '8px';
+            countTd.textContent = c.region_count;
+
+            var activeTd = document.createElement('td');
+            activeTd.style.padding = '8px';
+            var toggle = document.createElement('input');
+            toggle.type = 'checkbox';
+            toggle.checked = c.active;
+            toggle.addEventListener('change', function() {
+              var newVal = toggle.checked;
+              toggle.disabled = true;
+              // Update local state immediately so replica lag doesn't revert the UI
+              if (window._countryMap && window._countryMap[c.id]) {
+                window._countryMap[c.id].active = newVal;
+              }
+              fetch('/api/countries', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                body: JSON.stringify({ id: c.id, active: newVal ? 1 : 0 })
+              }).then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+                .then(function(result) {
+                  if (!result.ok) {
+                    toggle.checked = !newVal;
+                    if (window._countryMap && window._countryMap[c.id]) {
+                      window._countryMap[c.id].active = !newVal;
+                    }
+                    alert('Failed: ' + (result.data.error || 'Unknown error'));
+                  }
+                  toggle.disabled = false;
+                })
+                .catch(function(err) {
+                  toggle.checked = !newVal;
+                  if (window._countryMap && window._countryMap[c.id]) {
+                    window._countryMap[c.id].active = !newVal;
+                  }
+                  alert('Network error: ' + err.message);
+                  toggle.disabled = false;
+                });
+            });
+            activeTd.appendChild(toggle);
+
+            var actionsTd = document.createElement('td');
+            actionsTd.style.padding = '8px';
+
+            var editBtn = document.createElement('button');
+            editBtn.textContent = 'Edit';
+            editBtn.className = 'review-btn--undo';
+            editBtn.style.marginRight = '6px';
+            editBtn.addEventListener('click', function() {
+              editingCountryId = c.id;
+              cfPrefillReset();
+              cfLoadPrefill();
+              document.getElementById('cf-id').value = c.id;
+              document.getElementById('cf-id').disabled = true;
+              document.getElementById('cf-name').value = c.name;
+              document.getElementById('cf-flag').value = c.flag;
+              document.getElementById('cf-sw-lat').value = c.bounds_sw[0];
+              document.getElementById('cf-sw-lng').value = c.bounds_sw[1];
+              document.getElementById('cf-ne-lat').value = c.bounds_ne[0];
+              document.getElementById('cf-ne-lng').value = c.bounds_ne[1];
+              document.getElementById('cf-active').checked = c.active;
+              document.getElementById('country-form-row').style.display = '';
+              document.getElementById('cf-save-btn').textContent = 'Update';
+            });
+
+            if (window._isSuperAdmin) {
+              var deleteBtn = document.createElement('button');
+              deleteBtn.textContent = 'Delete';
+              deleteBtn.className = 'review-btn--reject';
+              deleteBtn.addEventListener('click', function() {
+                if (!confirm('Delete ' + c.name + '? This country has ' + c.region_count + ' approved submissions.')) return;
+                fetch('/api/countries?id=' + encodeURIComponent(c.id), {
+                  method: 'DELETE',
+                  headers: { 'x-csrf-token': window._csrfToken || '' }
+                }).then(function(r) { return r.json(); })
+                  .then(function(data) {
+                    if (data.error) { alert(data.error); return; }
+                    loadCountryManager();
+                    renderCountryTabs();
+                  });
+              });
+            }
+
+            actionsTd.appendChild(editBtn);
+            if (window._isSuperAdmin) actionsTd.appendChild(deleteBtn);
+
+            tr.appendChild(handleTd);
+            tr.appendChild(flagTd);
+            tr.appendChild(nameTd);
+            tr.appendChild(countTd);
+            tr.appendChild(activeTd);
+            tr.appendChild(actionsTd);
+            tbody.appendChild(tr);
+          });
+
+          // Keep _countryMap in sync so country tabs reflect changes
+          var freshMap = {};
+          (data.countries || []).forEach(function(c) {
+            countryNames[c.id] = c.name;
+            freshMap[c.id] = {
+              name: c.name, flag: c.flag,
+              bounds_sw: c.bounds_sw, bounds_ne: c.bounds_ne,
+              active: c.active, sort_order: c.sort_order,
+              region_count: c.region_count
+            };
+          });
+          window._countryMap = freshMap;
+
+          // Init drag-to-reorder (Sortable loaded at top of loadCountryManager)
+          var tbodyEl = document.getElementById('country-table-body');
+          if (tbodyEl) {
+            _loadScript('https://cdn.jsdelivr.net/npm/sortablejs@1.15.6/Sortable.min.js').then(function() {
+            window._countrySortable = new Sortable(tbodyEl, {
+              handle: '.country-drag-handle',
+              animation: 150,
+              ghostClass: 'country-row--ghost',
+              dragClass: 'country-row--dragging',
+              onEnd: function(evt) {
+                var rows = tbodyEl.querySelectorAll('tr[data-country-id]');
+                var order = [];
+                rows.forEach(function(r) { order.push(r.getAttribute('data-country-id')); });
+                fetch('/api/countries', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                  body: JSON.stringify({ action: 'reorder', order: order })
+                }).then(function(r) { return r.json(); })
+                  .then(function(d) {
+                    if (d.error) {
+                      console.error('reorder failed:', d.error);
+                      loadCountryManager(); // revert on failure
+                      return;
+                    }
+                    // Update _countryMap sort_order
+                    order.forEach(function(id, idx) {
+                      if (window._countryMap && window._countryMap[id]) {
+                        window._countryMap[id].sort_order = idx;
+                      }
+                    });
+                    renderCountryTabs();
+                  })
+                  .catch(function(err) {
+                    console.error('reorder network error:', err);
+                    loadCountryManager();
+                  });
+              }
+            });
+            }); // end _loadScript.then
+          }
+
+          // Render country/region proposals via the shared loader (respects the current status toggle).
+          // opts 透传下去：切标签进来时 proposals 也走「命中就跳过」。
+          loadProposals(currentProposalStatus, opts);
+          markShown('countries', key);
+        })
+        .catch(function(e) {
+          console.error('loadCountryManager error:', e);
+        });
+    }
+
+    function renderProposals(proposals) {
+      var wrapper = document.getElementById('country-proposals-wrapper');
+      var body = document.getElementById('country-proposals-body');
+      if (!wrapper || !body) return;
+      wrapper.hidden = false;
+      body.innerHTML = '';
+
+      if (!proposals || proposals.length === 0) {
+        var emptyTr = document.createElement('tr');
+        emptyTr.innerHTML = '<td colspan="7" style="padding:16px;text-align:center;color:var(--ink-faded);">'
+          + (currentProposalStatus === 'exists' ? 'No proposals marked as already exists' : 'No pending proposals') + '</td>';
+        body.appendChild(emptyTr);
+        return;
+      }
+
+      proposals.forEach(function(p) {
+        var tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border-warm)';
+
+        var latestDate = '';
+        if (p.latest) {
+          try {
+            latestDate = new Date(p.latest).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+          } catch(e) { latestDate = p.latest; }
+        }
+
+        tr.innerHTML =
+          '<td style="padding:8px;">' + escapeHtml(p.proposed_name) + '</td>' +
+          '<td style="padding:8px;">' +
+            '<span style="font-size:12px;background:var(--paper-warm);padding:2px 8px;border-radius:4px;">' +
+              (p.proposal_type === 'country' ? 'Country' : 'Region') +
+            '</span>' +
+          '</td>' +
+          '<td style="padding:8px;">' +
+            '<span style="background:var(--soil-dark);color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;min-width:20px;display:inline-block;text-align:center;">' + p.votes + '</span>' +
+          '</td>' +
+          '<td style="padding:8px;">' + escapeHtml(p.proposers || '') + '</td>' +
+          '<td style="padding:8px;white-space:nowrap;">' +
+            (p.provide_count > 0
+              ? '<span style="font-size:11px;background:var(--soil-dark);color:#fff;padding:2px 8px;border-radius:10px;margin-right:4px;">' + p.provide_count + ' provide</span>'
+              : '') +
+            (p.learn_count > 0
+              ? '<span style="font-size:11px;background:var(--soil-mid);color:#fff;padding:2px 8px;border-radius:10px;margin-right:4px;">' + p.learn_count + ' learn</span>'
+              : '') +
+            (p.unknown_count > 0
+              ? '<span style="font-size:11px;background:#9a9384;color:#fff;padding:2px 8px;border-radius:10px;">' + p.unknown_count + ' unknown</span>'
+              : '') +
+          '</td>' +
+          '<td style="padding:8px;">' + latestDate + '</td>';
+
+        var actionsTd = document.createElement('td');
+        actionsTd.style.padding = '8px';
+        actionsTd.style.whiteSpace = 'nowrap';
+        var btn = document.createElement('button');
+        if (currentProposalStatus === 'exists') {
+          btn.className = 'review-btn--undo';
+          btn.textContent = 'Undo';
+        } else {
+          btn.className = 'review-btn--exists';
+          btn.textContent = 'Mark as exists';
+        }
+        btn.addEventListener('click', function() {
+          setProposalStatus(p.proposed_name, p.proposal_type, currentProposalStatus === 'exists' ? 'pending' : 'exists');
+        });
+        actionsTd.appendChild(btn);
+
+        tr.appendChild(actionsTd);
+        body.appendChild(tr);
+      });
+    }
+
+    function loadProposals(status, opts) {
+      // 状态赋值在守卫**之前**：它记录的是「用户要看哪个筛选」，不是「渲染了没有」。
+      currentProposalStatus = status;
+      var key = 'countries|proposals|' + status;
+      if (skipIfCached('proposals', key, opts)) return Promise.resolve();
+      var body = document.getElementById('country-proposals-body');
+      if (body) {
+        body.innerHTML = '<tr><td colspan="7" style="padding:16px;text-align:center;color:var(--ink-faded);">Loading…</td></tr>';
+      }
+      return fetchOnce(key, '/api/countries?admin=1&proposal_status=' + encodeURIComponent(status), parseJSON)
+        .then(function(data) {
+          renderProposals(data && data.country_proposals ? data.country_proposals : []);
+          markShown('proposals', key);
+        })
+        .catch(function() {
+          renderProposals([]);
+        });
+    }
+
+    function setProposalStatus(name, type, status) {
+      fetch('/api/countries', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ action: 'proposal_set_status', proposed_name: name, proposal_type: type, status: status })
+      })
+      .then(function(r) { return r.json().then(function(d) { return { ok: r.ok, data: d }; }); })
+      .then(function(result) {
+        if (!result.ok) { alert('Failed: ' + (result.data && result.data.error ? result.data.error : 'Unknown error')); return; }
+        loadProposals(currentProposalStatus);
+      })
+      .catch(function(err) { alert('Network error: ' + err.message); });
+    }
+
+    // Wire the proposal status toggle (runs once at script load)
+    (function() {
+      var pendingBtn = document.getElementById('proposal-filter-pending');
+      var existsBtn = document.getElementById('proposal-filter-exists');
+      if (!pendingBtn || !existsBtn) return;
+      pendingBtn.addEventListener('click', function() {
+        pendingBtn.classList.add('is-active');
+        existsBtn.classList.remove('is-active');
+        loadProposals('pending', { reuse: true });
+      });
+      existsBtn.addEventListener('click', function() {
+        existsBtn.classList.add('is-active');
+        pendingBtn.classList.remove('is-active');
+        loadProposals('exists', { reuse: true });
+      });
+    })();
+
+    document.getElementById('cf-save-btn').addEventListener('click', function() {
+      var body = {
+        id: document.getElementById('cf-id').value.trim(),
+        name: document.getElementById('cf-name').value.trim(),
+        flag: document.getElementById('cf-flag').value.trim(),
+        bounds_sw: [parseFloat(document.getElementById('cf-sw-lat').value), parseFloat(document.getElementById('cf-sw-lng').value)],
+        bounds_ne: [parseFloat(document.getElementById('cf-ne-lat').value), parseFloat(document.getElementById('cf-ne-lng').value)],
+        active: document.getElementById('cf-active').checked ? 1 : 0
+      };
+
+      var method = editingCountryId ? 'PATCH' : 'POST';
+      if (editingCountryId) body.id = editingCountryId;
+
+      fetch('/api/countries', {
+        method: method,
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify(body)
+      }).then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.error) { alert(data.error); return; }
+          editingCountryId = null;
+          cfPrefillReset();
+          document.getElementById('country-form-row').style.display = 'none';
+          document.getElementById('cf-id').disabled = false;
+          document.getElementById('cf-id').value = '';
+          document.getElementById('cf-name').value = '';
+          document.getElementById('cf-flag').value = '';
+          document.getElementById('cf-sw-lat').value = '';
+          document.getElementById('cf-sw-lng').value = '';
+          document.getElementById('cf-ne-lat').value = '';
+          document.getElementById('cf-ne-lng').value = '';
+          document.getElementById('cf-active').checked = true;
+          document.getElementById('cf-save-btn').textContent = 'Save';
+          loadCountryManager();
+          renderCountryTabs();
+        });
+    });
+
+    document.getElementById('cf-cancel-btn').addEventListener('click', function() {
+      editingCountryId = null;
+      cfPrefillReset();
+      document.getElementById('country-form-row').style.display = 'none';
+      document.getElementById('cf-id').disabled = false;
+      document.getElementById('cf-id').value = '';
+      document.getElementById('cf-name').value = '';
+      document.getElementById('cf-flag').value = '';
+      document.getElementById('cf-sw-lat').value = '';
+      document.getElementById('cf-sw-lng').value = '';
+      document.getElementById('cf-ne-lat').value = '';
+      document.getElementById('cf-ne-lng').value = '';
+      document.getElementById('cf-active').checked = true;
+      document.getElementById('cf-save-btn').textContent = 'Save';
+    });
+
+    // --- Country prefill: 在 ID 里输入国家名/ISO2，自动填 name / flag / sw+ne ---
+    // 数据来自 data/country-prefill.json，由 scripts/build-country-prefill.js 生成。
+    // 懒加载：第一次打开表单时才拉，review.html 的首屏不受影响。
+    var CF_PREFILL_FIELDS = ['cf-name', 'cf-flag', 'cf-sw-lat', 'cf-sw-lng', 'cf-ne-lat', 'cf-ne-lng'];
+    var cfPrefillLoad = null;       // 只发一次的 fetch
+    var cfPrefillTouched = {};      // 用户手改过的字段，预填不再覆盖
+    var cfPrefillTimer = null;
+
+    /** 大小写、重音、空格、连字符都归一成 slug 形式，好让 "South Africa"/"south_africa" 都能命中 */
+    function cfNorm(s) {
+      return String(s || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    }
+
+    function cfLoadPrefill() {
+      if (cfPrefillLoad) return cfPrefillLoad;
+      cfPrefillLoad = fetch('/data/country-prefill.json')
+        .then(function(r) { return r.ok ? r.json() : {}; })
+        .then(function(data) {
+          var idx = {};
+          Object.keys(data).forEach(function(key) {
+            if (key.charAt(0) === '_') return;         // _aka 是别名表
+            var e = data[key];
+            idx[cfNorm(key)] = e;
+            idx[cfNorm(e.flag)] = e;                   // 允许直接输 ISO2：us / jp / cn
+            idx[cfNorm(e.name)] = e;
+          });
+          var aka = data._aka || {};
+          Object.keys(aka).forEach(function(a) {
+            if (data[aka[a]]) idx[cfNorm(a)] = data[aka[a]];
+          });
+          return idx;
+        })
+        .catch(function() { return {}; });
+      return cfPrefillLoad;
+    }
+
+    function cfPrefillHint(msg) {
+      document.getElementById('cf-prefill-hint').textContent = msg || '';
+    }
+
+    /** 重新打开表单时调用：清掉「用户改过」的记录，让预填重新可用 */
+    function cfPrefillReset() {
+      cfPrefillTouched = {};
+      cfPrefillHint('');
+    }
+
+    function cfApplyPrefill(entry) {
+      var filled = 0;
+      var values = [['cf-name', entry.name], ['cf-flag', entry.flag],
+        ['cf-sw-lat', entry.sw[0]], ['cf-sw-lng', entry.sw[1]],
+        ['cf-ne-lat', entry.ne[0]], ['cf-ne-lng', entry.ne[1]]];
+      values.forEach(function(pair) {
+        if (cfPrefillTouched[pair[0]]) return;   // 手动改过的不覆盖
+        document.getElementById(pair[0]).value = pair[1];
+        filled++;
+      });
+      cfPrefillHint(filled
+        ? 'Prefilled ' + filled + ' field' + (filled === 1 ? '' : 's') + ' from the country list — edit as needed.'
+        : 'Matched ' + entry.name + ', but you already filled those fields in.');
+    }
+
+    function cfLookup() {
+      var raw = document.getElementById('cf-id').value;
+      var q = cfNorm(raw);
+      if (!q) { cfPrefillHint(''); return; }
+      cfLoadPrefill().then(function(idx) {
+        var entry = idx[q];
+        if (entry) { cfApplyPrefill(entry); return; }
+        // 输入到一半（"chi"）不报未命中，免得边打字边闪红
+        cfPrefillHint(q.length >= 3 ? 'No match for "' + raw.trim() + '" — fill in manually.' : '');
+      });
+    }
+
+    cfPrefillReset();
+    CF_PREFILL_FIELDS.forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('input', function() { cfPrefillTouched[id] = true; });
+    });
+    document.getElementById('cf-id').addEventListener('input', function() {
+      if (this.disabled) return;                   // 编辑已有国家时不预填
+      clearTimeout(cfPrefillTimer);
+      cfPrefillTimer = setTimeout(cfLookup, 180);  // 等手停下来再查，避免中间态乱填
+    });
+
+    document.getElementById('add-country-btn').addEventListener('click', function() {
+      editingCountryId = null;
+      cfPrefillReset();
+      cfLoadPrefill();                             // 提前预热，别等用户打完字才发请求
+      document.getElementById('cf-id').disabled = false;
+      document.getElementById('cf-id').value = '';
+      document.getElementById('cf-name').value = '';
+      document.getElementById('cf-flag').value = '';
+      document.getElementById('cf-sw-lat').value = '';
+      document.getElementById('cf-sw-lng').value = '';
+      document.getElementById('cf-ne-lat').value = '';
+      document.getElementById('cf-ne-lng').value = '';
+      document.getElementById('cf-active').checked = true;
+      document.getElementById('cf-save-btn').textContent = 'Save';
+      document.getElementById('country-form-row').style.display = '';
+    });
+
+    // Primary tab clicks
+    document.querySelectorAll('#primary-tabs .review-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        document.querySelectorAll('#primary-tabs .review-tab').forEach(function(t) { t.classList.remove('is-active'); });
+        tab.classList.add('is-active');
+        showModule(tab.dataset.module);
+      });
+    });
+
+
+    // Status tab clicks (only affects submissions)
+    document.querySelectorAll('#status-tabs .review-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        if (tab.dataset.status === currentStatus) return;
+        document.querySelectorAll('#status-tabs .review-tab').forEach(function(t) { t.classList.remove('is-active'); });
+        tab.classList.add('is-active');
+        currentStatus = tab.dataset.status;
+        // Clear search when switching tabs
+        var searchInput = document.getElementById('review-search');
+        if (searchInput) { searchInput.value = ''; _searchQuery = ''; }
+        if (currentModule === 'submissions') {
+          clearBatchSelection();
+          loadSubmissions(currentStatus, currentCountry, { reuse: true });
+        }
+      });
+    });
+
+    // --- Batch bar ---
+    batchBar = document.getElementById('batch-bar');
+
+    function updateBatchBar() {
+      var ids = Object.keys(batchSelected).filter(function(k) { return batchSelected[k]; });
+      var count = ids.length;
+      document.getElementById('batch-count').textContent = count + ' selected';
+      batchBar.hidden = count === 0;
+    }
+
+    // 列表每次加载都是整个重建的，所以选中状态必须和**实际渲染出来的行**对齐。
+    // 少这一步会同时坏三处（它们各自记着「选中」的一部分）：
+    //
+    //   - `batchSelected`（批量条读的模型）会留下已经不在屏幕上的 id —— 批量通过会连
+    //     审核者根本看不到的提交一起通过；
+    //   - 重建出来的 checkbox 全是未勾选的（建卡片时不恢复状态）；
+    //   - `#select-all-checkbox` 在 `#review-list` **外面**，重建碰不到它，于是留着旧的勾。
+    //
+    // 恢复勾选也放在这里而不是建卡片时，是为了让这一处成为唯一真源。
+    // **每一个**出口都要调，`loadSubmissions()` 现在有四个：响应格式不对、列表真空了
+    // （两个提前 return，别只改其中一个 —— 上次就是漏了这条最常见的）、渲染走到尾、fetch 抛错。
+    function reconcileBatchSelection() {
+      var seen = {};
+      document.querySelectorAll('.review-item__checkbox input').forEach(function(cb) {
+        var id = cb.dataset.submissionId;
+        seen[id] = true;
+        cb.checked = !!batchSelected[id];
+      });
+      Object.keys(batchSelected).forEach(function(id) {
+        if (!seen[id]) delete batchSelected[id];
+      });
+      updateBatchBar();
+      syncSelectAll();
+    }
+
+    // Clear selection
+    document.getElementById('batch-clear-btn').addEventListener('click', function() {
+      clearBatchSelection();
+      document.querySelectorAll('.review-item__checkbox input').forEach(function(cb) {
+        cb.checked = false;
+      });
+    });
+
+    // Batch approve
+    document.getElementById('batch-approve-btn').addEventListener('click', function() {
+      var ids = Object.keys(batchSelected).filter(function(k) { return batchSelected[k]; });
+      if (ids.length === 0) return;
+      if (!confirm('Approve ' + ids.length + ' submission(s)?')) return;
+      var btn = this;
+      disableWhile(btn, 'Processing...', fetch('/api/review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ action: 'batch', ids: ids, batch_action: 'approve' })
+      })
+      .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+      .then(function(result) {
+        if (!result.ok) { alert('Batch approve failed: ' + (result.data.error || 'Unknown error')); return; }
+        clearBatchSelection();
+        dropFromSubmissionsCache(ids);
+      })
+      .catch(function(err) { alert('Network error: ' + err.message); }));
+    });
+
+    // Batch reject
+    document.getElementById('batch-reject-btn').addEventListener('click', function() {
+      var ids = Object.keys(batchSelected).filter(function(k) { return batchSelected[k]; });
+      if (ids.length === 0) return;
+      if (!confirm('Reject ' + ids.length + ' submission(s)?')) return;
+      var reason = prompt('Reject reason (required):') || '';
+      if (!reason.trim()) { alert('A reject reason is required.'); return; }
+      var btn = this;
+      disableWhile(btn, 'Processing...', fetch('/api/review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ action: 'batch', ids: ids, batch_action: 'reject', reject_reason: reason.trim() })
+      })
+      .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+      .then(function(result) {
+        if (!result.ok) { alert('Batch reject failed: ' + (result.data.error || 'Unknown error')); return; }
+        clearBatchSelection();
+        loadSubmissions(currentStatus, currentCountry);
+      })
+      .catch(function(err) { alert('Network error: ' + err.message); }));
+    });
+
+    // Select-all checkbox
+    document.getElementById('select-all-checkbox').addEventListener('change', function() {
+      var checked = this.checked;
+      document.querySelectorAll('.review-item__checkbox input').forEach(function(cb) {
+        cb.checked = checked;
+        var id = cb.dataset.submissionId;
+        if (checked) {
+          batchSelected[id] = true;
+        } else {
+          delete batchSelected[id];
+        }
+      });
+      updateBatchBar();
+    });
+
+    function loadSubmissions(status, country, opts) {
+      var key = submissionsKey(status, country);
+      if (skipIfCached('submissions', key, opts)) return Promise.resolve();
+      var list = document.getElementById('review-list');
+      list.innerHTML = '<p>Loading...</p>';
+      // Fire-and-forget: Leaflet loads while the API call is in-flight. 小地图那边会等这个
+      // promise，所以「趁 API 在飞」只是加速，不再是正确性的前提。
+      ensureLeaflet();
+
+      // URL 只在这里拼一次；401 与 step 错误的解析搬进了 parseReviewList。
+      // 原来的 `&_=` + Date.now() 由 cache:'no-store' 覆盖。
+      var url = '/api/review?status=' + status;
+      if (country && country !== 'all') { url += '&country=' + country; }
+      return fetchOnce(key, url, parseReviewList, { noStore: true }).then(function(data) {
+        // Show/hide batch UI based on status tab (before early return, so
+        // "Select All" is visible even when the pending list is empty)
+        document.getElementById('select-all-label').style.display = (status === 'pending' && status !== 'trash' ? '' : 'none');
+        // Tag batch controls are recreated per render; drop stale selection state
+        // and hide the (previous) bar before rebuilding the list.
+        tagBatchSelected = {};
+        clearTagBatchSelection();
+        if (status !== 'pending') {
+          clearBatchSelection();
+        }
+        // 提交的批量条**不在这里**隐藏：渲染结束后由 reconcileBatchSelection() 统一决定，
+        // 它会把条子的显隐和真实勾选数对齐。以前这里无条件隐藏条子、却保留 batchSelected，
+        // 于是条子和模型各说各话（见该函数的注释）。
+
+        if (!data || !data.submissions) {
+          list.innerHTML = '<p>No submissions yet.</p>';
+          reconcileBatchSelection();   // 列表空了 → 选中项全部被裁掉
+          applySearchFilter();
+          markShown('submissions', key);
+          return;
+        }
+        list.innerHTML = '';
+        var hasSubmissions = data.submissions.length > 0;
+        var hasPendingTags = status === 'pending' && data.pending_tags && data.pending_tags.length > 0;
+        if (!hasSubmissions && !hasPendingTags) {
+          list.innerHTML = '<p>No submissions yet.</p>';
+          reconcileBatchSelection();   // 列表空了 → 把选中项和条子一起收掉
+          applySearchFilter();
+          markShown('submissions', key);
+          return;
+        }
+
+        data.submissions.forEach(function(s) {
+          var item = document.createElement('div');
+          item.className = 'review-item';
+          item.dataset.searchText = (s.name || '') + ' ' + (s.submitted_by || '');
+
+          // Checkbox for batch selection (only on pending tab)
+          if (status === 'pending') {
+            var checkboxWrap = document.createElement('div');
+            checkboxWrap.className = 'review-item__checkbox';
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.dataset.submissionId = s.id;
+            cb.addEventListener('change', function() {
+              if (cb.checked) {
+                batchSelected[s.id] = true;
+              } else {
+                delete batchSelected[s.id];
+              }
+              updateBatchBar();
+              syncSelectAll();
+            });
+            checkboxWrap.appendChild(cb);
+            item.appendChild(checkboxWrap);
+          }
+
+          // Trash items: simplified card with Delete Forever button only
+          if (status === 'trash') {
+            var item = document.createElement('div');
+            item.className = 'review-item review-item--trash';
+            item.dataset.searchText = (s.name || '') + ' ' + (s.submitted_by || '');
+
+            var info = document.createElement('div');
+            info.className = 'review-item__info';
+
+            var tags = Array.isArray(s.tags) ? s.tags : [];
+            var deletedDate = '';
+            if (s.deleted_at) {
+              try {
+                deletedDate = new Date(s.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+              } catch(e) { deletedDate = s.deleted_at; }
+            }
+
+            info.innerHTML =
+              '<div class="review-item__name">' + escapeHtml(s.name)
+              + ' <span class="status-badge status-badge--rejected" style="vertical-align:middle;margin-left:8px;">Trash</span></div>'
+              + '<div class="review-item__desc">Deleted by ' + escapeHtml(s.submitted_by || 'unknown') + ' on ' + deletedDate + '</div>'
+              + '<div style="font-size:12px;color:var(--ink-faded);">'
+              + escapeHtml(countryNames[s.country_id] || s.country_id || 'South Africa')
+              + '</div>';
+
+            var actions = document.createElement('div');
+            actions.className = 'review-item__actions';
+
+            var deleteForeverBtn = document.createElement('button');
+            deleteForeverBtn.className = 'review-btn--reject';
+            deleteForeverBtn.textContent = 'Delete Forever';
+            deleteForeverBtn.addEventListener('click', function() {
+              if (!confirm('Permanently delete "' + s.name + '"? This cannot be undone.')) return;
+              disableWhile(deleteForeverBtn, 'Deleting...',
+                fetch('/api/review?id=' + encodeURIComponent(s.id), {
+                  method: 'DELETE',
+                  headers: { 'x-csrf-token': window._csrfToken || '' }
+                }).then(function(r) {
+                  if (!r.ok) return r.json().then(function(body) { throw new Error(body.error || 'Server error'); });
+                  return r.json();
+                }).then(function() {
+                  loadSubmissions(currentStatus, currentCountry);
+                })
+              );
+            });
+
+            actions.appendChild(deleteForeverBtn);
+            info.appendChild(actions);
+            item.appendChild(info);
+            list.appendChild(item);
+            return; // skip normal rendering for trash items
+          }
+
+          var mapDiv = document.createElement('div');
+          if (s.scope === 'country') {
+            // 国家范围条目没有几何。照常建小地图的话会渲染成一个空白灰框 ——
+            // 审核者分不清"这条本来就没有形状"和"预览坏了"。换成一格明确的说明。
+            mapDiv.className = 'review-item__map review-item__map--scope';
+            mapDiv.textContent = 'Country-wide';
+          } else {
+            mapDiv.className = 'review-item__map';
+            mapDiv.id = 'map-' + s.id;
+            mapDiv.setAttribute('data-geojson', typeof s.geojson === 'string' ? s.geojson : JSON.stringify(s.geojson));
+          }
+
+          var info = document.createElement('div');
+          info.className = 'review-item__info';
+          var tags = Array.isArray(s.tags) ? s.tags : [];
+
+          var tagsHtml = tags.length > 0
+            ? '<div class="review-item__tags">' + tags.map(function(t) {
+                var cleanName = typeof formatTagName === 'function' ? formatTagName(t) : t;
+                var fullName = typeof formatTagFull === 'function' ? formatTagFull(t) : t;
+                return '<span class="review-item__tag" title="' + escapeHtml(fullName) + '">' + escapeHtml(cleanName) + '</span>';
+              }).join('') + '</div>'
+            : '';
+
+          var draftBadgeHtml = s.edit_target_id
+            ? ' <span class="review-item__draft-badge">Draft edit</span>'
+            : '';
+
+          // 审核者要一眼看出这条覆盖的是整个国家（没有形状可核对），而不是一个小区域。
+          var scopeBadgeHtml = s.scope === 'country'
+            ? ' <span class="review-item__scope-badge">Country-wide</span>'
+            : '';
+
+          var flaggedParts = [];
+          if (s.useless_count >= 5) flaggedParts.push(flaggedBadgePart('useless', s.useless_count));
+          if (s.wrong_count >= 5) flaggedParts.push(flaggedBadgePart('wrong', s.wrong_count));
+          if (s.error_count >= 1) flaggedParts.push(flaggedBadgePart('error', s.error_count));
+          var flaggedBadgeHtml = flaggedParts.length > 0
+            ? ' <span class="review-item__flagged-badge">' + flaggedParts.join(' ') + '</span>'
+            : '';
+
+          info.innerHTML = '<div class="review-item__name">'
+            + escapeHtml(s.name)
+            + (s.submitted_by ? ' <span class="review-item__submitter">by ' + escapeHtml(s.submitted_by) + '</span>' : '')
+            + draftBadgeHtml
+            + scopeBadgeHtml
+            + flaggedBadgeHtml
+            + '</div>'
+            + '<div class="review-item__meta">'
+            + escapeHtml(countryNames[s.country_id] || s.country_id || 'South Africa')
+            + ' &middot; ' + escapeHtml(s.link)
+            + '</div>'
+            + '<div class="review-item__desc">' + escapeHtml(s.description) + (s.detailed_description ? ' <span style="font-size:11px;color:var(--ink-faded,#888);">📝 Detailed</span>' : '') + '</div>'
+            + tagsHtml;
+
+          // 来源标注徽章 —— 审核者必须看得到（未标注时不渲染）
+          var reviewSourceBadge = buildSourceBadge(s.source_type, s.source_url);
+          if (reviewSourceBadge) {
+            var reviewSourceWrap = document.createElement('div');
+            reviewSourceWrap.style.cssText = 'margin-top:6px;';
+            reviewSourceWrap.appendChild(reviewSourceBadge);
+            info.appendChild(reviewSourceWrap);
+          }
+
+          var actions = document.createElement('div');
+          actions.className = 'review-item__actions';
+          if (status === 'pending') {
+            var approveBtn = document.createElement('button');
+            approveBtn.className = 'review-btn--approve';
+            approveBtn.textContent = 'Approve';
+            approveBtn.addEventListener('click', function() { reviewAction(s.id, 'approved'); });
+            var rejectBtn = document.createElement('button');
+            rejectBtn.className = 'review-btn--reject';
+            rejectBtn.textContent = 'Reject';
+            rejectBtn.addEventListener('click', function() { reviewAction(s.id, 'rejected'); });
+            actions.appendChild(approveBtn);
+            actions.appendChild(rejectBtn);
+          } else {
+            var undoBtn = document.createElement('button');
+            undoBtn.className = 'review-btn--undo';
+            undoBtn.textContent = status === 'flagged' ? 'Dismiss' : 'Undo';
+            undoBtn.addEventListener('click', function() {
+              if (status === 'flagged') {
+                dismissFlagAction(s.id);
+              } else {
+                reviewAction(s.id, 'pending');
+              }
+            });
+            actions.appendChild(undoBtn);
+            if (status === 'rejected' || status === 'approved' || status === 'flagged') {
+              var delBtn = document.createElement('button');
+              delBtn.className = 'review-btn--reject';
+              delBtn.textContent = 'Delete';
+              delBtn.addEventListener('click', function() {
+                if (!confirm('Permanently delete "' + s.name + '"? This cannot be undone.')) return;
+                var btn = this;
+                disableWhile(btn, 'Deleting...', fetch('/api/review?id=' + s.id, { method: 'DELETE', headers: { 'x-csrf-token': window._csrfToken || '' } })
+                  .then(function() { loadSubmissions(currentStatus, currentCountry); })
+                  .catch(function(err) { alert('Delete failed: ' + err.message); }));
+              });
+              actions.appendChild(delBtn);
+            }
+          }
+          // Edit button (all statuses)
+          var editBtn = document.createElement('button');
+          editBtn.className = 'review-btn--approve';
+          editBtn.textContent = 'Edit';
+          editBtn.addEventListener('click', function() {
+            startInlineEdit(s, item, info, actions);
+          });
+          actions.appendChild(editBtn);
+
+          // Street View button
+          var svBtn = document.createElement('button');
+          svBtn.className = 'review-btn--streetview';
+          svBtn.textContent = 'Street View';
+          var svList = normalizeStreetViewList(s.streetview);
+          if (svList.length === 0) {
+            svBtn.disabled = true;
+            svBtn.title = 'No Street View data available';
+          }
+          svBtn.addEventListener('click', function() {
+            openStreetViewModal(s);
+          });
+          actions.appendChild(svBtn);
+
+          info.appendChild(actions);
+
+          item.appendChild(mapDiv);
+          item.appendChild(info);
+          list.appendChild(item);
+        });
+
+        // Render pending tag proposals (only on pending tab), in their own
+        // section with a select-all + batch bar. Uses a separate checkbox class
+        // (.review-item__tag-checkbox) and selection map so the submission
+        // batch bar and select-all never see these items.
+        if (hasPendingTags) {
+          var tagSection = document.createElement('section');
+          tagSection.className = 'review-item__tags-section';
+          tagSection.id = 'pending-tags-section';
+
+          var tagHeader = document.createElement('h3');
+          tagHeader.className = 'review-item__tags-header';
+          tagHeader.textContent = 'Pending Tag Proposals';
+          tagSection.appendChild(tagHeader);
+
+          var tagControls = document.createElement('div');
+          tagControls.className = 'review-item__tags-controls';
+          tagControls.innerHTML =
+              '<label class="batch-select-all"><input type="checkbox" id="tag-select-all-checkbox" /> Select All</label>'
+            + '<div class="batch-bar batch-bar--inline" id="tag-batch-bar" hidden>'
+            + '<span class="batch-bar__count" id="tag-batch-count">0 selected</span>'
+            + '<button class="review-btn--approve" id="tag-batch-approve-btn">Approve</button>'
+            + '<button class="review-btn--reject" id="tag-batch-reject-btn">Reject</button>'
+            + '<button class="review-btn--undo" id="tag-batch-clear-btn">Clear</button>'
+            + '</div>';
+          tagSection.appendChild(tagControls);
+
+          var tagList = document.createElement('div');
+          tagList.className = 'review-item__tags-list';
+          tagSection.appendChild(tagList);
+
+          data.pending_tags.forEach(function(pt) {
+            var item = document.createElement('div');
+            item.className = 'review-item';
+            item.dataset.searchText = (pt.name || '') + ' ' + (pt.submitted_by || '') + ' ' + (pt.submission_name || '');
+
+            var tagCbWrap = document.createElement('div');
+            tagCbWrap.className = 'review-item__tag-checkbox';
+            var tagCb = document.createElement('input');
+            tagCb.type = 'checkbox';
+            tagCb.dataset.tagId = pt.id;
+            tagCb.addEventListener('change', function() {
+              if (tagCb.checked) {
+                tagBatchSelected[pt.id] = true;
+              } else {
+                delete tagBatchSelected[pt.id];
+              }
+              updateTagBatchBar();
+              syncTagSelectAll();
+            });
+            tagCbWrap.appendChild(tagCb);
+            item.appendChild(tagCbWrap);
+
+            var info = document.createElement('div');
+            info.className = 'review-item__info';
+            info.innerHTML = '<div class="review-item__name">&#x1f3f7; Tag Proposal: ' + escapeHtml(pt.name) + '</div>'
+              + '<div class="review-item__country">Category: ' + escapeHtml(pt.category) + '</div>'
+              + (pt.submitted_by ? '<div class="review-item__submitter" style="margin-bottom:4px;">by ' + escapeHtml(pt.submitted_by) + '</div>' : '')
+              + (pt.submission_name ? '<div class="review-item__submitter" style="margin-bottom:4px;">from: ' + escapeHtml(pt.submission_name) + '</div>' : '')
+              + '<div style="font-size:12px;color:var(--ink-faded);">' + escapeHtml(pt.created_at) + '</div>';
+
+            var actions = document.createElement('div');
+            actions.className = 'review-item__actions';
+            var approveBtn = document.createElement('button');
+            approveBtn.className = 'review-btn--approve';
+            approveBtn.textContent = 'Approve';
+            approveBtn.addEventListener('click', function() {
+              var btn = this;
+              disableWhile(btn, 'Approving...', fetch('/api/tags', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                body: JSON.stringify({ id: pt.id, status: 'approved' })
+              }).then(function() { if (currentModule === 'submissions') loadSubmissions(currentStatus, currentCountry); }));
+            });
+            var rejectBtn = document.createElement('button');
+            rejectBtn.className = 'review-btn--reject';
+            rejectBtn.textContent = 'Reject';
+            rejectBtn.addEventListener('click', function() {
+              var btn = this;
+              disableWhile(btn, 'Rejecting...', fetch('/api/tags?id=' + pt.id + '&type=tag', {
+                method: 'DELETE',
+                headers: { 'x-csrf-token': window._csrfToken || '' }
+              }).then(function() { if (currentModule === 'submissions') loadSubmissions(currentStatus, currentCountry); }));
+            });
+            actions.appendChild(approveBtn);
+            actions.appendChild(rejectBtn);
+            info.appendChild(actions);
+            item.appendChild(info);
+            tagList.appendChild(item);
+          });
+
+          // Tag section select-all (scoped to the section's checkboxes)
+          tagControls.querySelector('#tag-select-all-checkbox').addEventListener('change', function() {
+            var checked = this.checked;
+            tagList.querySelectorAll('.review-item__tag-checkbox input').forEach(function(cb) {
+              cb.checked = checked;
+              var tid = cb.dataset.tagId;
+              if (checked) {
+                tagBatchSelected[tid] = true;
+              } else {
+                delete tagBatchSelected[tid];
+              }
+            });
+            updateTagBatchBar();
+          });
+
+          // Tag batch approve
+          tagControls.querySelector('#tag-batch-approve-btn').addEventListener('click', function() {
+            var ids = Object.keys(tagBatchSelected).filter(function(k) { return tagBatchSelected[k]; });
+            if (ids.length === 0) return;
+            if (!confirm('Approve ' + ids.length + ' tag proposal(s)?')) return;
+            var btn = this;
+            disableWhile(btn, 'Processing...', fetch('/api/tags', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+              body: JSON.stringify({ action: 'batch', ids: ids, batch_action: 'approve' })
+            })
+            .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+            .then(function(result) {
+              if (!result.ok) { alert('Batch approve failed: ' + (result.data.error || 'Unknown error')); return; }
+              clearTagBatchSelection();
+              if (currentModule === 'submissions') loadSubmissions(currentStatus, currentCountry);
+            })
+            .catch(function(err) { alert('Network error: ' + err.message); }));
+          });
+
+          // Tag batch reject
+          tagControls.querySelector('#tag-batch-reject-btn').addEventListener('click', function() {
+            var ids = Object.keys(tagBatchSelected).filter(function(k) { return tagBatchSelected[k]; });
+            if (ids.length === 0) return;
+            if (!confirm('Reject ' + ids.length + ' tag proposal(s)?')) return;
+            var btn = this;
+            disableWhile(btn, 'Processing...', fetch('/api/tags', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+              body: JSON.stringify({ action: 'batch', ids: ids, batch_action: 'reject' })
+            })
+            .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+            .then(function(result) {
+              if (!result.ok) { alert('Batch reject failed: ' + (result.data.error || 'Unknown error')); return; }
+              clearTagBatchSelection();
+              if (currentModule === 'submissions') loadSubmissions(currentStatus, currentCountry);
+            })
+            .catch(function(err) { alert('Network error: ' + err.message); }));
+          });
+
+          // Tag batch clear
+          tagControls.querySelector('#tag-batch-clear-btn').addEventListener('click', function() {
+            clearTagBatchSelection();
+          });
+
+          list.appendChild(tagSection);
+        }
+
+        // Observe map placeholders for lazy rendering
+        document.querySelectorAll('.review-item__map').forEach(function(el) {
+          mapObserver.observe(el);
+        });
+
+        // Apply any active search filter after rendering
+        applySearchFilter();
+        reconcileBatchSelection();
+        markShown('submissions', key);
+
+      })
+      .catch(function(err) {
+        // 会话失效才整页刷新。注意预加载期的 unauthorized 会打上 e.preload 标记 ——
+        // 它只是「密码门还没过」，绝不能在这里触发刷新（见 unauthorizedError 的注释）。
+        if (isSessionExpired(err)) { location.reload(); return; }
+        list.innerHTML = '<p style="color:var(--feedback-red);">Load failed: ' + escapeHtml(err.message) + '</p>';
+        reconcileBatchSelection();   // 列表被错误信息替换 → 选中项全部被裁掉
+        applySearchFilter();
+        console.error('loadSubmissions error:', err);
+      });
+    }
+
+    function dismissFlagAction(id) {
+      var mapEl = document.getElementById('map-' + id);
+      if (mapEl) {
+        var cardBtns = mapEl.closest('.review-item').querySelectorAll('button');
+        cardBtns.forEach(function(b) { b.disabled = true; b.style.opacity = '0.6'; b.style.cursor = 'not-allowed'; });
+      }
+      fetch('/api/review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ action: 'dismiss_flag', id: id })
+      })
+      .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+      .then(function(result) {
+        if (!result.ok) {
+          alert('Dismiss failed: ' + (result.data.error || 'Unknown error'));
+        }
+        loadSubmissions(currentStatus, currentCountry);
+      })
+      .catch(function(err) {
+        alert('Network error: ' + err.message);
+        loadSubmissions(currentStatus, currentCountry);
+      });
+    }
+
+    function reviewAction(id, newStatus) {
+      // Disable buttons on this card to prevent double-click
+      var mapEl = document.getElementById('map-' + id);
+      if (mapEl) {
+        var cardBtns = mapEl.closest('.review-item').querySelectorAll('button');
+        cardBtns.forEach(function(b) { b.disabled = true; b.style.opacity = '0.6'; b.style.cursor = 'not-allowed'; });
+      }
+
+      var reason = '';
+      if (newStatus === 'rejected') {
+        if (!confirm('Reject this submission?')) {
+          // Re-enable buttons since we're aborting
+          if (mapEl) {
+            var btns = mapEl.closest('.review-item').querySelectorAll('button');
+            btns.forEach(function(b) { b.disabled = false; b.style.opacity = ''; b.style.cursor = ''; });
+          }
+          return;
+        }
+        reason = prompt('Reason (optional):') || '';
+      }
+
+      // 单独处理一条 = 多选上下文结束，整批勾选作废 —— 和切 tab、批量通过、批量拒绝一致。
+      // 放在这里而不是各 then/catch 里：上面两个能中止的路径（reject 取消）必须已经返回，
+      // 而一旦真的发了请求，行就要离开当前 tab，留着勾选只会让条子跟着残留。
+      // 注意它不能更早 —— 放在 confirm/prompt 之前的话，取消 reject 也会把勾选清掉。
+      clearBatchSelection();
+
+      fetch('/api/review', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ id: id, status: newStatus, reason: reason })
+      })
+      .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+      .then(function(result) {
+        if (!result.ok) {
+          alert('Action failed: ' + (result.data.error || 'Unknown error'));
+          // 失败要重拉（默认语义会先失效）：本地摘除只适用于成功响应，
+          // 失败时列表必须回到服务端的真实状态。
+          loadSubmissions(currentStatus, currentCountry);
+          return;
+        }
+        console.log('review PATCH result:', result.data);
+        dropFromSubmissionsCache([id]);
+      })
+      .catch(function(err) {
+        alert('Network error: ' + err.message);
+        loadSubmissions(currentStatus, currentCountry);
+      });
+    }
+
+    // Lazy mini-map observer
+    //
+    // ⚠️ 绘制必须**等 Leaflet 就绪**，不能直接画。观察者常常比脚本先到：页面从加载到解锁
+    // 不足一秒时（探针实测 0ms 那次），回调发生在 Leaflet 可用之前 —— 那时 `L` 还不存在，
+    // 抛出的异常被 catch 吞掉，而紧接着已经 unobserve，这个位置就**再也不会重试**，
+    // 小地图永久空着，控制台里只留一条不显眼的错误。等一下就没有这个赌局。
+    // （解锁前等 1 秒即正常；就算真踩中，下一次重渲染也会自己补上 —— 所以这是加固，不是救火。）
+    var mapObserver = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (!entry.isIntersecting) return;
+        var el = entry.target;
+        // 一个位置只处理一次。放在最前面：下面每条提前 return 都不必再各自 unobserve。
+        mapObserver.unobserve(el);
+
+        var geoStr = el.getAttribute('data-geojson');
+        if (!geoStr) return;
+
+        // 解析失败就是数据坏了，重试多少次都一样 —— 只有「库还没到」值得等。
+        var feature;
+        try {
+          var geo = JSON.parse(geoStr);
+          if (!geo) return;
+          // Normalize: array of geometries → FeatureCollection for L.geoJSON
+          if (Array.isArray(geo)) {
+            if (geo.length === 0) return;
+            feature = { type: 'FeatureCollection', features: geo.map(function(g) { return { type: 'Feature', properties: {}, geometry: g }; }) };
+          } else if (geo.type) {
+            feature = geo;
+          } else {
+            return;
+          }
+        } catch(e) { console.error('Mini map geo parse error:', e); return; }
+
+        ensureLeaflet().then(function() {
+          if (typeof L === 'undefined') { console.error('Leaflet 未能加载，跳过小地图'); return; }
+          try {
+            var miniMap = L.map(el, { zoomControl: false, attributionControl: false });
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(miniMap);
+            var layer = L.geoJSON(feature);
+            layer.addTo(miniMap);
+            var bounds = layer.getBounds();
+            if (bounds.isValid()) miniMap.fitBounds(bounds, { padding: [10, 10] });
+          } catch(e) { console.error('Mini map render error:', e); }
+        });
+      });
+    }, { rootMargin: '100px' });
+
+    function startInlineEdit(s, item, info, actions) {
+      // Save original DOM children so we can restore them with event listeners intact
+      var originalInfoNodes = [];
+      while (info.firstChild) {
+        originalInfoNodes.push(info.firstChild);
+        info.removeChild(info.firstChild);
+      }
+      var originalActionNodes = [];
+      while (actions.firstChild) {
+        originalActionNodes.push(actions.firstChild);
+        actions.removeChild(actions.firstChild);
+      }
+
+      // If already in edit mode for this item, skip (prevents double form)
+      if (info.querySelector('.review-item__edit-form')) return;
+
+      info.innerHTML =
+        '<div class="review-item__edit-form">' +
+          '<input type="text" id="edit-name-' + s.id + '" value="' + escapeHtml(s.name) + '" placeholder="Region name" />' +
+          '<textarea id="edit-desc-' + s.id + '" rows="3" placeholder="Description">' + escapeHtml(s.description) + '</textarea>' +
+          '<textarea id="edit-detail-' + s.id + '" rows="4" placeholder="Detailed description (optional)">' + escapeHtml(s.detailed_description || '') + '</textarea>' +
+          // 来源只读显示：管理员改的是内容，不改来源（与 api/review.js 里那两条
+          // 「故意不写 source」的类 C UPDATE 是同一个决定的两面）。这里不放输入控件。
+          '<div id="edit-source-' + s.id + '" style="margin-bottom:6px;"></div>' +
+          '<label style="font-size:12px;color:var(--ink-faded);margin-bottom:2px;display:block;">Tags</label>' +
+          '<select id="edit-tag-cat-' + s.id + '" style="width:100%;padding:6px 8px;border:1px solid var(--border-warm);border-radius:4px;font-size:13px;margin-bottom:6px;">' +
+            '<option value="">-- Select category --</option>' +
+          '</select>' +
+          '<div id="edit-tag-chips-' + s.id + '" style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px;"></div>' +
+          '<div id="edit-selected-tags-' + s.id + '" style="font-size:12px;margin-bottom:6px;min-height:20px;"></div>' +
+          '<input type="text" id="edit-link-' + s.id + '" value="' + escapeHtml(s.link).replace(/"/g, '&quot;') + '" placeholder="Street View link" />' +
+          '<div class="edit-actions">' +
+            '<button class="edit-btn--save">Save</button>' +
+            '<button class="edit-btn--cancel">Cancel</button>' +
+          '</div>' +
+        '</div>';
+
+      actions.innerHTML = '';
+
+      // 只读来源徽章：管理员看不到来源就没法核对，但这里不提供编辑控件。
+      var editSourceSlot = document.getElementById('edit-source-' + s.id);
+      if (editSourceSlot) {
+        var editSourceBadge = buildSourceBadge(s.source_type, s.source_url);
+        if (editSourceBadge) {
+          var editSourceLabel = document.createElement('div');
+          editSourceLabel.style.cssText = 'font-size:12px;color:var(--ink-faded);margin-bottom:4px;';
+          editSourceLabel.textContent = 'Source (read-only)';
+          editSourceSlot.appendChild(editSourceLabel);
+          editSourceSlot.appendChild(editSourceBadge);
+        }
+      }
+
+      // --- Tag chip selector ---
+      var editSelectedTags = Array.isArray(s.tags) ? s.tags.slice() : [];
+
+      function updateSelectedDisplay() {
+        var div = document.getElementById('edit-selected-tags-' + s.id);
+        if (!div) return;
+        div.innerHTML = editSelectedTags.length
+          ? 'Selected: ' + editSelectedTags.map(function(t) { return '<span class="tag-chip is-selected" style="font-size:12px;cursor:default;">' + escapeHtml(t) + '</span>'; }).join(' ')
+          : '';
+      }
+
+      function renderChips(catName) {
+        var chipsDiv = document.getElementById('edit-tag-chips-' + s.id);
+        if (!chipsDiv) return;
+        chipsDiv.innerHTML = '';
+        if (!catName || !window._categoriesData) return;
+
+        var cat = window._categoriesData.find(function(c) { return c.name === catName; });
+        if (!cat) return;
+
+        cat.tags.forEach(function(tag) {
+          var row = document.createElement('div');
+          row.style.cssText = 'display:flex;align-items:center;flex-wrap:wrap;gap:4px;';
+
+          var chip = document.createElement('span');
+          chip.className = 'tag-chip';
+          chip.style.cssText = 'font-size:12px;';
+          chip.textContent = tag.name;
+          if (editSelectedTags.indexOf(tag.name) > -1) chip.classList.add('is-selected');
+
+          chip.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var idx = editSelectedTags.indexOf(tag.name);
+            if (idx > -1) {
+              editSelectedTags.splice(idx, 1);
+              chip.classList.remove('is-selected');
+              if (tag.children) {
+                tag.children.forEach(function(child) {
+                  var cidx = editSelectedTags.indexOf(child.name);
+                  if (cidx > -1) editSelectedTags.splice(cidx, 1);
+                });
+              }
+            } else {
+              editSelectedTags.push(tag.name);
+              chip.classList.add('is-selected');
+            }
+            updateSelectedDisplay();
+            // Re-render children if expanded
+            if (tag.children && tag.children.length > 0) {
+              var next = row.nextElementSibling;
+              if (next && next.style.display !== 'none') {
+                renderChildren(next, tag, chip);
+              }
+            }
+          });
+          row.appendChild(chip);
+
+          // Expand toggle for tags with children
+          if (tag.children && tag.children.length > 0) {
+            var toggle = document.createElement('span');
+            toggle.textContent = '▸';
+            toggle.style.cssText = 'cursor:pointer;font-size:12px;padding:2px 4px;user-select:none;';
+            toggle.title = 'Show sub-tags';
+
+            var childRow = document.createElement('div');
+            childRow.style.cssText = 'display:none;padding-left:16px;width:100%;flex-wrap:wrap;gap:4px;margin-top:4px;';
+
+            function renderChildren(container, parentTag, parentChip) {
+              container.innerHTML = '';
+              parentTag.children.forEach(function(child) {
+                var cchip = document.createElement('span');
+                cchip.className = 'tag-chip';
+                cchip.style.cssText = 'font-size:11px;';
+                cchip.textContent = child.name;
+                if (editSelectedTags.indexOf(child.name) > -1) cchip.classList.add('is-selected');
+                cchip.addEventListener('click', function(ev) {
+                  ev.stopPropagation();
+                  var idx = editSelectedTags.indexOf(child.name);
+                  if (idx > -1) {
+                    editSelectedTags.splice(idx, 1);
+                    cchip.classList.remove('is-selected');
+                  } else {
+                    editSelectedTags.push(child.name);
+                    cchip.classList.add('is-selected');
+                    // Auto-select parent when child selected
+                    if (editSelectedTags.indexOf(parentTag.name) === -1) {
+                      editSelectedTags.push(parentTag.name);
+                      parentChip.classList.add('is-selected');
+                    }
+                  }
+                  updateSelectedDisplay();
+                });
+                container.appendChild(cchip);
+              });
+            }
+
+            toggle.addEventListener('click', function(e) {
+              e.stopPropagation();
+              if (childRow.style.display === 'none') {
+                renderChildren(childRow, tag, chip);
+                childRow.style.display = 'flex';
+                toggle.textContent = '▾';
+              } else {
+                childRow.style.display = 'none';
+                toggle.textContent = '▸';
+              }
+            });
+
+            row.appendChild(toggle);
+            chipsDiv.appendChild(row);
+            chipsDiv.appendChild(childRow);
+          } else {
+            chipsDiv.appendChild(row);
+          }
+        });
+      }
+
+      // Populate category dropdown and wire up
+      function initTagSelector() {
+        var catSelect = document.getElementById('edit-tag-cat-' + s.id);
+        if (!catSelect) return;
+
+        function populate(categories) {
+          window._categoriesData = categories;
+          catSelect.innerHTML = '<option value="">-- Select category --</option>';
+          categories.forEach(function(cat) {
+            var opt = document.createElement('option');
+            opt.value = cat.name;
+            opt.textContent = cat.name + ' (' + cat.tags.length + ')';
+            catSelect.appendChild(opt);
+          });
+        }
+
+        catSelect.addEventListener('change', function() {
+          renderChips(this.value);
+        });
+
+        if (window._categoriesData) {
+          populate(window._categoriesData);
+        } else {
+          // 与 loadTagManager 共用同一个 key：谁先取到都会写回缓存，后到的直接命中。
+          // 以前这里读 _preload 却不 delete，而 loadTagManager 会 delete —— 命中与否取决于
+          // 谁先跑，是个纯粹的时序巧合。同一个 fetchOnce 之后就无所谓先后了。
+          fetchOnce('tags', '/api/tags', parseJSON)
+            .then(function(data) {
+              if (data && data.categories) populate(data.categories);
+            }).catch(function() {});
+        }
+
+        updateSelectedDisplay();
+      }
+
+      initTagSelector();
+      // --- End tag chip selector ---
+
+      info.querySelector('.edit-btn--save').addEventListener('click', function() {
+        var btn = this;
+        var name = document.getElementById('edit-name-' + s.id).value.trim();
+        if (!name) { alert('Name is required.'); return; }
+
+        var body = {
+          action: 'edit',
+          id: s.id,
+          name: name,
+          description: document.getElementById('edit-desc-' + s.id).value,
+          detailed_description: document.getElementById('edit-detail-' + s.id).value,
+          tags: editSelectedTags,
+          link: document.getElementById('edit-link-' + s.id).value
+        };
+
+        disableWhile(btn, 'Saving...', fetch('/api/review', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+          body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+        .then(function(result) {
+          if (!result.ok) {
+            alert('Edit failed: ' + (result.data.error || 'Unknown error'));
+            return;
+          }
+          loadSubmissions(currentStatus, currentCountry);
+        })
+        .catch(function(err) {
+          alert('Network error: ' + err.message);
+        }));
+      });
+
+      info.querySelector('.edit-btn--cancel').addEventListener('click', function() {
+        // Restore original DOM children with event listeners intact
+        while (info.firstChild) info.removeChild(info.firstChild);
+        originalInfoNodes.forEach(function(n) { info.appendChild(n); });
+        while (actions.firstChild) actions.removeChild(actions.firstChild);
+        originalActionNodes.forEach(function(n) { actions.appendChild(n); });
+      });
+    }
+
+    // --- Tag Management ---
+
+    function loadTagManager(opts) {
+      var key = 'tags';
+      if (skipIfCached('tags', key, opts)) return Promise.resolve();
+      return fetchOnce(key, '/api/tags', parseJSON, { noStore: true })
+        .then(function(data) {
+          if (!data || !data.categories) { markShown('tags', key); return; }
+
+          // Populate batch category select
+          var batchSelect = document.getElementById('batch-category-select');
+          batchSelect.innerHTML = '<option value="">-- Select category --</option>';
+          data.categories.forEach(function(cat) {
+            var opt = document.createElement('option');
+            opt.value = cat.name;
+            opt.textContent = cat.name;
+            batchSelect.appendChild(opt);
+          });
+
+          // Render categories list
+          var list = document.getElementById('categories-list');
+          list.innerHTML = '';
+          data.categories.forEach(function(cat) {
+            var section = document.createElement('div');
+            section.className = 'tag-manager__category';
+
+            var header = document.createElement('div');
+            header.className = 'tag-manager__cat-header';
+            var catNameStrong = document.createElement('strong');
+            catNameStrong.textContent = cat.name;
+            catNameStrong.style.cursor = 'pointer';
+            catNameStrong.title = 'Click to rename';
+            catNameStrong.addEventListener('click', function() {
+              var input = document.createElement('input');
+              input.type = 'text';
+              input.value = cat.name;
+              input.style.cssText = 'font-size:15px;font-weight:600;width:180px;padding:2px 6px;border:1px solid var(--border-warm);border-radius:4px;';
+              var self = this;
+              self.replaceWith(input);
+              input.focus();
+              input.select();
+
+              function save() {
+                if (!input.isConnected) return;  // input already removed from DOM (e.g., Esc pressed)
+                var val = input.value.trim();
+                input.replaceWith(self);
+                if (!val || val === cat.name) return;
+                fetch('/api/tags', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                  body: JSON.stringify({ action: 'rename_category', old_name: cat.name, new_name: val })
+                }).then(function(r) { return r.json(); })
+                  .then(function(d) {
+                    if (d.success) { cat.name = val; self.textContent = val; loadTagManager(); }
+                    else { alert('Rename failed: ' + (d.error || 'Unknown error')); }
+                  });
+              }
+
+              input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+              input.addEventListener('keydown', function(e) { if (e.key === 'Escape') { input.replaceWith(self); } });
+              input.addEventListener('blur', function() { save(); });
+            });
+            header.appendChild(catNameStrong);
+            header.appendChild(document.createTextNode(' (' + cat.tags.length + ' tags)'));
+
+            var delBtn = document.createElement('button');
+            delBtn.className = 'review-btn--delete';
+            delBtn.textContent = 'Delete';
+            delBtn.style.cssText = 'font-size:12px;padding:2px 8px;';
+            delBtn.addEventListener('click', function() {
+              if (!confirm('Delete category "' + cat.name + '" and all its tags?')) return;
+              var btn = this;
+              disableWhile(btn, 'Deleting...', fetch('/api/tags?type=category&name=' + encodeURIComponent(cat.name), {
+                method: 'DELETE',
+                headers: { 'x-csrf-token': window._csrfToken || '' }
+              }).then(function() { loadTagManager(); }));
+            });
+            header.appendChild(delBtn);
+            section.appendChild(header);
+
+            var tagList = document.createElement('div');
+            tagList.className = 'tag-manager__tags';
+            function renderTagChip(tag, isChild) {
+              var chip = document.createElement('span');
+              chip.className = 'tag-chip';
+              if (isChild) {
+                chip.style.cssText = 'margin-left:16px;font-size:12px;';
+              }
+              var tagNameSpan = document.createElement('span');
+              tagNameSpan.textContent = tag.name;
+              tagNameSpan.style.cursor = 'pointer';
+              tagNameSpan.title = 'Click to rename';
+              tagNameSpan.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var input = document.createElement('input');
+                input.type = 'text';
+                input.value = tag.name;
+                input.style.cssText = 'width:100px;padding:1px 4px;font-size:12px;border:1px solid var(--border-warm);border-radius:3px;';
+                var self = this;
+                self.replaceWith(input);
+                input.focus();
+                input.select();
+
+                function save() {
+                  if (!input.isConnected) return;  // input already removed from DOM (e.g., Esc pressed)
+                  var val = input.value.trim();
+                  input.replaceWith(self);
+                  if (!val || val === tag.name) return;
+                  fetch('/api/tags', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                    body: JSON.stringify({ action: 'rename_tag', id: tag.id, new_name: val })
+                  }).then(function(r) { return r.json(); })
+                    .then(function(d) {
+                      if (d.success) { tag.name = val; self.textContent = val; }
+                      else { alert('Rename failed: ' + (d.error || 'Unknown error')); }
+                    });
+                }
+
+                input.addEventListener('keydown', function(e) { if (e.key === 'Enter') { save(); } });
+                input.addEventListener('keydown', function(e) { if (e.key === 'Escape') { input.replaceWith(self); } });
+                input.addEventListener('blur', function() { save(); });
+              });
+              chip.appendChild(tagNameSpan);
+
+              // Add child button (only for top-level tags)
+              if (!isChild) {
+                var addChild = document.createElement('button');
+                addChild.textContent = '+';
+                addChild.title = 'Add sub-tag';
+                addChild.style.cssText = 'background:none;border:1px solid var(--border-warm);border-radius:3px;color:var(--ink-faded);cursor:pointer;margin-left:4px;font-size:11px;padding:0 4px;';
+                addChild.addEventListener('click', function(e) {
+                  e.stopPropagation();
+                  var input = document.createElement('input');
+                  input.type = 'text';
+                  input.placeholder = 'Sub-tag name...';
+                  input.style.cssText = 'margin-left:8px;padding:2px 6px;font-size:12px;width:120px;border:1px solid var(--border-warm);border-radius:3px;';
+                  input.addEventListener('keydown', function(ev) {
+                    if (ev.key === 'Enter') {
+                      var val = input.value.trim();
+                      if (!val) return;
+                      disableWhile(input, 'Adding...', fetch('/api/tags', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                        body: JSON.stringify({ action: 'create_tags_batch', category: cat.name, parent_id: tag.id, names: [val] })
+                      }).then(function(r) { return r.json(); })
+                        .then(function() { loadTagManager(); })
+                        .catch(function(err) { alert('Add sub-tag failed: ' + err.message); }));
+                    }
+                    if (ev.key === 'Escape') { input.remove(); }
+                  });
+                  input.addEventListener('blur', function() {
+                    if (!input.value.trim()) { input.remove(); return; }
+                    loadTagManager();
+                  });
+                  chip.appendChild(input);
+                  input.focus();
+                });
+                chip.appendChild(addChild);
+              }
+
+              // Delete button
+              var delTag = document.createElement('button');
+              delTag.textContent = '×';
+              delTag.style.cssText = 'background:none;border:none;color:var(--feedback-red);cursor:pointer;margin-left:4px;';
+              delTag.addEventListener('click', function(ev) {
+                ev.stopPropagation();
+                var label = tag.children ? 'Delete "' + tag.name + '" and its sub-tags?' : 'Delete "' + tag.name + '"?';
+                if (!confirm(label)) return;
+                var btn = this;
+                disableWhile(btn, 'Deleting...', fetch('/api/tags?id=' + tag.id + '&type=tag', {
+                  method: 'DELETE',
+                  headers: { 'x-csrf-token': window._csrfToken || '' }
+                }).then(function() { loadTagManager(); })
+                  .catch(function(err) { alert('Delete tag failed: ' + err.message); }));
+              });
+              chip.appendChild(delTag);
+              tagList.appendChild(chip);
+
+              // Render children
+              if (tag.children && tag.children.length > 0) {
+                tag.children.forEach(function(child) {
+                  renderTagChip(child, true);
+                });
+              }
+            }
+
+            cat.tags.forEach(function(tag) {
+              renderTagChip(tag, false);
+            });
+            section.appendChild(tagList);
+            list.appendChild(section);
+          });
+          markShown('tags', key);
+        })
+        .catch(function(e) {
+          var list = document.getElementById('categories-list');
+          if (list) list.innerHTML = '<p style="color:var(--feedback-red);">Failed to load tags: ' + escapeHtml(e.message) + '</p>';
+        });
+    }
+
+    // Create category button
+    document.getElementById('create-category-btn').addEventListener('click', function() {
+      var btn = this;
+      var name = document.getElementById('new-category-name').value.trim();
+      if (!name) return;
+      disableWhile(btn, 'Creating...', fetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ action: 'create_category', category: name })
+      }).then(function(r) { return r.json(); })
+        .then(function() {
+          document.getElementById('new-category-name').value = '';
+          loadTagManager();
+        })
+        .catch(function(err) { alert('Create category failed: ' + err.message); }));
+    });
+
+    // Add tags button
+    document.getElementById('add-tags-btn').addEventListener('click', function() {
+      var btn = this;
+      var cat = document.getElementById('batch-category-select').value;
+      var text = document.getElementById('batch-tag-names').value.trim();
+      if (!cat || !text) return;
+      var names = text.split('\n').map(function(s) { return s.trim(); }).filter(Boolean);
+      disableWhile(btn, 'Adding...', fetch('/api/tags', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+        body: JSON.stringify({ action: 'create_tags_batch', category: cat, names: names })
+      }).then(function(r) { return r.json(); })
+        .then(function() {
+          document.getElementById('batch-tag-names').value = '';
+          loadTagManager();
+        })
+        .catch(function(err) { alert('Add tags failed: ' + err.message); }));
+    });
+
+    // --- Users ---
+    function loadUsers(opts) {
+      var key = 'users';
+      if (skipIfCached('users', key, opts)) return Promise.resolve();
+      var grid = document.getElementById('user-grid');
+      var count = document.getElementById('user-count');
+      grid.innerHTML = '<p>Loading...</p>';
+      return fetchOnce(key, '/api/users', parseJSON)
+        .then(function(data) {
+          if (!data || !data.users) { markShown('users', key); return; }
+          count.textContent = data.users.length + ' registered user' + (data.users.length !== 1 ? 's' : '');
+          if (data.users.length === 0) {
+            grid.innerHTML = '<p>No users yet.</p>';
+            return;
+          }
+          grid.innerHTML = '';
+          data.users.forEach(function(u) {
+            var card = document.createElement('div');
+            card.style.cssText = 'display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--paper-light,#faf8f3);border:1px solid var(--border-warm,#e0d8cc);border-radius:var(--radius);margin-bottom:8px;';
+
+            var avatar = document.createElement('img');
+            avatar.src = u.avatar_url || '';
+            avatar.style.cssText = 'width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;';
+            avatar.alt = u.username;
+            if (!u.avatar_url) {
+              avatar.style.display = 'none';
+            }
+
+            var placeholder = document.createElement('div');
+            placeholder.style.cssText = 'width:36px;height:36px;border-radius:50%;background:var(--ink-charcoal,#333);color:#fff;display:' + (u.avatar_url ? 'none' : 'flex') + ';align-items:center;justify-content:center;font-weight:700;font-size:16px;flex-shrink:0;';
+            placeholder.textContent = u.username.charAt(0).toUpperCase();
+
+            var info = document.createElement('div');
+            info.style.cssText = 'flex:1;min-width:0;';
+
+            var nameRow = document.createElement('div');
+            nameRow.style.cssText = 'display:flex;align-items:center;gap:8px;';
+
+            var name = document.createElement('strong');
+            name.textContent = u.username;
+            name.style.cssText = 'font-size:14px;';
+
+            nameRow.appendChild(name);
+
+            // Role pill group — interactive for others, read-only for self
+            var currentUserId = window._user && window._user.id;
+            var roles = ['user', 'trusted', 'admin'];
+            var roleFills = { user: '#D4EDDA', trusted: '#D6EAF8', admin: '#F8D7DA' };
+            var roleTextColors = { user: '#155724', trusted: '#1A5276', admin: '#721C24' };
+            var pillGroup = document.createElement('span');
+            pillGroup.style.cssText = 'display:inline-flex;gap:0;border-radius:4px;overflow:hidden;border:1px solid var(--border-warm,#e0d8cc);font-size:10px;';
+            roles.forEach(function(r) {
+              var isActive = r === u.role;
+              var pill = document.createElement('span');
+              pill.textContent = r;
+              pill.style.cssText = 'padding:2px 8px;line-height:1.5;user-select:none;' +
+                (roles.indexOf(r) > 0 ? 'border-left:1px solid var(--border-warm,#e0d8cc);' : '') +
+                (isActive
+                  ? 'background:' + roleFills[r] + ';color:' + roleTextColors[r] + ';font-weight:600;'
+                  : 'background:transparent;color:var(--ink-faded,#999);');
+              if (u.id !== currentUserId) {
+                pill.style.cursor = 'pointer';
+                pill.title = isActive ? 'Current role' : 'Click to set role to ' + r;
+                pill.addEventListener('mouseenter', function() {
+                  if (!isActive) this.style.background = roleFills[r];
+                });
+                pill.addEventListener('mouseleave', function() {
+                  if (!isActive) this.style.background = 'transparent';
+                });
+                pill.addEventListener('click', function() {
+                  if (r === u.role) return;
+                  if (!confirm('Change "' + u.username + '" role from ' + u.role + ' to ' + r + '?')) return;
+                  fetch('/api/users', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                    body: JSON.stringify({ id: u.id, role: r })
+                  })
+                  .then(function(res) { return res.json().then(function(d) { return { ok: res.ok, data: d }; }); })
+                  .then(function(result) {
+                    if (!result.ok) { alert('Failed: ' + (result.data.error || 'Unknown error')); }
+                    loadUsers();
+                  })
+                  .catch(function(err) { alert('Error: ' + err.message); loadUsers(); });
+                });
+              }
+              pillGroup.appendChild(pill);
+            });
+            nameRow.appendChild(pillGroup);
+
+            // Banned status badge
+            var banned = u.status === 'banned';
+            if (banned) {
+              var banBadge = document.createElement('span');
+              banBadge.textContent = 'banned';
+              banBadge.style.cssText = 'font-size:10px;background:var(--red-fill);color:#fff;padding:1px 6px;border-radius:3px;';
+              nameRow.appendChild(banBadge);
+            }
+
+            // Ban/Unban button (don't allow self-ban)
+            if (u.id !== currentUserId) {
+              var banBtn = document.createElement('button');
+              banBtn.className = banned ? 'review-btn--undo' : 'review-btn--delete';
+              banBtn.textContent = banned ? 'Unban' : 'Ban';
+              banBtn.style.cssText = 'font-size:12px;padding:4px 14px;margin-left:auto;min-height:44px;display:inline-flex;align-items:center;';
+              banBtn.addEventListener('click', function() {
+                var newStatus = banned ? 'active' : 'banned';
+                var action = newStatus === 'banned' ? 'Ban' : 'Unban';
+                if (!confirm(action + ' user "' + u.username + '"? ' + (banned ? 'They will regain full access.' : 'They will be unable to log in.'))) return;
+                fetch('/api/users', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                  body: JSON.stringify({ id: u.id, status: newStatus })
+                })
+                .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+                .then(function(result) {
+                  if (!result.ok) { alert('Failed: ' + (result.data.error || 'Unknown error')); return; }
+                  loadUsers();
+                })
+                .catch(function(err) { alert('Error: ' + err.message); });
+              });
+              nameRow.appendChild(banBtn);
+            }
+
+            var date = document.createElement('div');
+            date.style.cssText = 'font-size:12px;color:var(--ink-muted,#888);margin-top:2px;';
+            date.textContent = 'Joined ' + (u.created_at || '').substring(0, 10);
+
+            info.appendChild(nameRow);
+            info.appendChild(date);
+
+            card.appendChild(avatar);
+            card.appendChild(placeholder);
+            card.appendChild(info);
+            grid.appendChild(card);
+          });
+          markShown('users', key);
+        })
+        .catch(function(e) {
+          if (isSessionExpired(e)) { grid.innerHTML = '<p>Access denied.</p>'; return; }
+          grid.innerHTML = '<p>Load failed: ' + escapeHtml(e.message) + '</p>';
+        });
+    }
+
+    var _dailyChart = null;
+    var _deviceChart = null;
+
+    // Chart.js 把图画在 canvas 上，**CSS 完全够不到** —— 刻度文字、网格线、数据集颜色
+    // 都必须在 JS 侧显式给。所以主题一变它们不会自己更新，必须重设 + update()。
+    // ⚠️ 这是继①底图光栅瓦片 ②街景 iframe ③星图 canvas 之后，第 4 处 CSS 够不到的表面。
+    // 前两处已决策保持浅色（不归我们画）；这里和星图一样，像素是我们自己画的，所以必须接管。
+    // 最要命的是**刻度文字**：不给就吃 Chart.js 默认的 #666，深色下是灰字压深底。
+    function chartTheme() {
+      var cs = getComputedStyle(document.documentElement);
+      function v(n, fb) { var x = cs.getPropertyValue(n); return (x && x.trim()) || fb; }
+      return {
+        line: v('--soil-mid', '#4a7c59'),
+        fill: 'rgba(' + v('--soil-rgb', '74, 124, 89') + ', 0.08)',
+        grid: v('--border-warm', '#e8e4dd'),
+        text: v('--ink-faded', '#7a7265')
+      };
+    }
+    function retintCharts() {
+      var c = chartTheme();
+      if (_dailyChart) {
+        _dailyChart.data.datasets[0].borderColor = c.line;
+        _dailyChart.data.datasets[0].backgroundColor = c.fill;
+        _dailyChart.options.scales.x.ticks.color = c.text;
+        _dailyChart.options.scales.y.ticks.color = c.text;
+        _dailyChart.options.scales.y.grid.color = c.grid;
+        _dailyChart.update();
+      }
+      if (_deviceChart && _deviceChart.options.plugins.legend.labels) {
+        _deviceChart.options.plugins.legend.labels.color = c.text;
+        _deviceChart.update();
+      }
+    }
+    document.addEventListener('theme:change', retintCharts);
+
+    // Chart.js 没到位时，两个图表槽各自留一行说明。canvas 只是**藏起来**、不删 —— 这样重试
+    // 成功时把说明摘掉、canvas 放回原处就行，不必重建 DOM。
+    var CHART_SLOT_IDS = ['daily-chart', 'device-chart'];
+    function markChartsUnavailable() {
+      CHART_SLOT_IDS.forEach(function(id) {
+        var canvas = document.getElementById(id);
+        if (!canvas || !canvas.parentNode) return;
+        canvas.hidden = true;
+        if (canvas.parentNode.querySelector('.analytics-chart-note')) return;
+        var note = document.createElement('div');
+        note.className = 'analytics-chart-note';
+        note.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;justify-content:center;'
+          + 'text-align:center;padding:0 12px;font-size:12px;color:var(--ink-faded);';
+        note.textContent = 'Chart library unavailable';
+        canvas.parentNode.appendChild(note);
+      });
+    }
+    function clearChartNotes() {
+      CHART_SLOT_IDS.forEach(function(id) {
+        var canvas = document.getElementById(id);
+        if (!canvas || !canvas.parentNode) return;
+        canvas.hidden = false;
+        var note = canvas.parentNode.querySelector('.analytics-chart-note');
+        if (note) note.parentNode.removeChild(note);
+      });
+    }
+
+    // 两个图表的绘制。配色一律从令牌现取（CSS 够不到 canvas —— 见上面 retintCharts 的注释）。
+    // 只在 Chart.js 确认到位后由 loadAnalytics 调用，所以这里可以放心直接用 Chart。
+    function renderAnalyticsCharts(data) {
+      var ct = chartTheme();
+
+      // Daily views
+      var labels = (data.daily_views || []).map(function(d) { return d.date.slice(5); }); // MM-DD
+      var values = (data.daily_views || []).map(function(d) { return d.count; });
+      var ctx = document.getElementById('daily-chart').getContext('2d');
+      if (_dailyChart) _dailyChart.destroy();
+      _dailyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Views',
+            data: values,
+            borderColor: ct.line,
+            backgroundColor: ct.fill,
+            fill: true,
+            tension: 0.3,
+            pointRadius: 2,
+            pointHoverRadius: 5
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { maxTicksLimit: 10, font: { size: 10 }, color: ct.text }, grid: { display: false } },
+            y: { beginAtZero: true, ticks: { font: { size: 10 }, color: ct.text }, grid: { color: ct.grid } }
+          }
+        }
+      });
+
+      // Devices
+      var dev = data.devices || {};
+      var devCtx = document.getElementById('device-chart').getContext('2d');
+      if (_deviceChart) _deviceChart.destroy();
+      _deviceChart = new Chart(devCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Desktop', 'Mobile', 'Tablet'],
+          datasets: [{
+            data: [dev.desktop || 0, dev.mobile || 0, dev.tablet || 0],
+            backgroundColor: ['#4a7c59', '#8dbf9a', '#c4dcc8'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { position: 'bottom', labels: { font: { size: 11 }, padding: 16, color: ct.text } } }
+        }
+      });
+    }
+
+    // 面板级的失败提示。这里以前**只有**一个 console.error：卡片和下面四张表全空，用户在
+    // 界面上看不到任何原因。其它六个模块失败时都会写一行，analytics 是唯一哑的。
+    function showAnalyticsError(msg) {
+      var el = document.getElementById('analytics-error');
+      if (!el) return;
+      el.textContent = msg;
+      el.hidden = false;
+    }
+    function clearAnalyticsError() {
+      var el = document.getElementById('analytics-error');
+      if (el) { el.hidden = true; el.textContent = ''; }
+    }
+
+    function loadNotes(opts) {
+      var key = 'notes';
+      if (skipIfCached('notes', key, opts)) return Promise.resolve();
+      var list = document.getElementById('notes-list');
+      list.innerHTML = '<div style="color:var(--ink-faded);">Loading…</div>';
+      return fetchOnce(key, '/api/review?status=pending', parseJSON)
+        .then(function(data) {
+          var notes = data.notes || [];
+          list.innerHTML = '';
+          if (notes.length === 0) {
+            list.innerHTML = '<div style="color:var(--ink-faded);">No notes.</div>';
+            return;
+          }
+          notes.forEach(function(n) {
+            // Note card: header row (meta left, actions right on the SAME line), body below.
+            var row = document.createElement('div');
+            row.style.cssText = 'padding:12px;background:var(--paper-light);border:1px solid var(--border-warm);border-radius:8px;display:flex;flex-direction:column;';
+
+            var head = document.createElement('div');
+            head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;';
+            var meta = document.createElement('div');
+            meta.style.cssText = 'font-size:12px;color:var(--ink-faded);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
+            meta.textContent = n.username + ' · ' + (countryNames[n.country_id] || n.country_id) + ' · ' + n.status;
+            head.appendChild(meta);
+
+            var actions = document.createElement('div');
+            actions.style.cssText = 'display:flex;gap:6px;flex:0 0 auto;';
+            if (n.status === 'pending') {
+              var approveBtn = document.createElement('button');
+              approveBtn.className = 'review-btn--approve';
+              approveBtn.textContent = 'Approve';
+              approveBtn.addEventListener('click', function() {
+                disableWhile(approveBtn, 'Approving…', fetch('/api/review', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                  body: JSON.stringify({ action: 'note_approve', id: n.id })
+                })).then(function() { loadNotes(); });
+              });
+              actions.appendChild(approveBtn);
+            }
+            var deleteBtn = document.createElement('button');
+            deleteBtn.className = 'review-btn--delete';
+            deleteBtn.textContent = 'Delete';
+            deleteBtn.addEventListener('click', function() {
+              disableWhile(deleteBtn, 'Deleting…', fetch('/api/review', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+                body: JSON.stringify({ action: 'note_delete', id: n.id })
+              })).then(function() { loadNotes(); });
+            });
+            actions.appendChild(deleteBtn);
+            head.appendChild(actions);
+            row.appendChild(head);
+
+            var body = document.createElement('div');
+            body.style.cssText = 'font-size:14px;white-space:pre-wrap;word-break:break-word;';
+            body.textContent = n.note;
+            row.appendChild(body);
+
+            list.appendChild(row);
+          });
+          markShown('notes', key);
+        })
+        .catch(function(e) {
+          if (isSessionExpired(e)) { list.innerHTML = '<div style="color:var(--feedback-red);">Access denied.</div>'; return; }
+          list.innerHTML = '<div style="color:var(--feedback-red);">Failed to load notes.</div>';
+        });
+    }
+
+    function loadAnalytics() {
+      var range = document.getElementById('analytics-range').value;
+      var key = 'analytics|' + range;
+      // 分析数据在本页是只读的 —— 没有任何操作会改它，所以每次加载都算「导航」：命中已渲染的
+      // 缓存就整个跳过。需要强制刷新时由 Reload 按钮先 invalidate（它顺手清掉 _shown）。
+      // 换 range 也是一个新的 key，天然走「第一次看」的路径。
+      if (skipIfCached('analytics', key, { reuse: true })) return Promise.resolve();
+      var loadingEl = document.getElementById('analytics-loading');
+      if (loadingEl) loadingEl.hidden = false;
+      clearAnalyticsError();
+
+      // ⚠️ Chart.js 必须先到位再 new Chart()。这里原来是 fire-and-forget：脚本和 JSON 同时起飞、
+      // 谁也不等谁 —— CDN 慢或被挡时 Chart 还是 undefined，new Chart 抛 ReferenceError，把
+      // 后面 Top Pages / Visitors / Recent 的渲染**整段带走**（卡片在它之前赋值，所以卡片还在，
+      // 于是面板只剩上半截）。而那个错被下面裸的 console.error 吃掉，界面上一个字都没有。
+      // 现在显式等待；等不到也只是没有图表，表格照常渲染。
+      var chartReady = _loadScript(CHART_JS_SRC).then(
+        function() { return true; },
+        function() { return false; }
+      );
+      return Promise.all([
+        chartReady,
+        fetchOnce(key, '/api/pageview?action=stats&range=' + encodeURIComponent(range), parseJSON)
+      ])
+        .then(function(results) {
+          var chartOk = results[0];
+          var data = results[1];
+          // Summary cards
+          document.getElementById('stat-total').textContent = data.total_views || 0;
+          document.getElementById('stat-unique').textContent = data.unique_ips || 0;
+          var today = (data.daily_views || []).filter(function(d) {
+            return d.date === new Date().toISOString().slice(0, 10);
+          });
+          document.getElementById('stat-today').textContent = today.length > 0 ? today[0].count : 0;
+
+          // 图表：库没到位就整块跳过。**绝不能让它影响下面的表格** —— 原来那个 bug 的形态正是
+          // 一个 ReferenceError 把 Top Pages / Visitors / Recent 一起带走。
+          if (chartOk) {
+            try {
+              renderAnalyticsCharts(data);
+              clearChartNotes();
+            } catch (e) {
+              console.error('analytics charts failed:', e);
+              chartOk = false;
+            }
+          }
+          if (!chartOk) markChartsUnavailable();
+
+          // Top pages
+          var pagesList = document.getElementById('top-pages-list');
+          pagesList.innerHTML = '';
+          (data.top_pages || []).forEach(function(p, i) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f0ede6;font-size:13px;';
+            row.innerHTML = '<span><strong>' + (i + 1) + '.</strong> ' + escapeHtml(p.page) + '</span><span style="color:var(--soil-dark);font-weight:600;">' + p.count + '</span>';
+            pagesList.appendChild(row);
+          });
+
+          // Visitor summary — client-side sortable
+          var visitorData = data.visitors || [];
+          var visitorSort = { key: 'last_visit', dir: 'desc' };  // default: most recent first
+
+          function renderVisitors() {
+            var sorted = visitorData.slice().sort(function(a, b) {
+              var va, vb;
+              if (visitorSort.key === 'last_visit') {
+                va = new Date(a.last_visit).getTime() || 0;
+                vb = new Date(b.last_visit).getTime() || 0;
+              } else {
+                va = a.visits || 0;
+                vb = b.visits || 0;
+              }
+              return visitorSort.dir === 'desc' ? vb - va : va - vb;
+            });
+            var visitorsBody = document.getElementById('visitors-tbody');
+            visitorsBody.innerHTML = '';
+            sorted.forEach(function(v) {
+              var tr = document.createElement('tr');
+              tr.style.borderBottom = '1px solid #f0ede6';
+              var lastVisit = '';
+              try { lastVisit = new Date(v.last_visit).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) {}
+              tr.innerHTML = '<td style="padding:6px 8px;">' + escapeHtml(v.username) + '</td>'
+                + '<td style="padding:6px 8px;">' + v.visits + '</td>'
+                + '<td style="padding:6px 8px;white-space:nowrap;">' + lastVisit + '</td>';
+              visitorsBody.appendChild(tr);
+            });
+            // Update sort arrows
+            var arrowVisits = document.querySelector('#visitors-sort-visits .sort-arrow');
+            var arrowLast = document.querySelector('#visitors-sort-last .sort-arrow');
+            if (arrowVisits) arrowVisits.textContent = visitorSort.key === 'visits' ? (visitorSort.dir === 'desc' ? '▼' : '▲') : '';
+            if (arrowLast) arrowLast.textContent = visitorSort.key === 'last_visit' ? (visitorSort.dir === 'desc' ? '▼' : '▲') : '';
+          }
+
+          document.getElementById('visitors-sort-visits').addEventListener('click', function() {
+            if (visitorSort.key === 'visits') {
+              visitorSort.dir = visitorSort.dir === 'desc' ? 'asc' : 'desc';
+            } else {
+              visitorSort.key = 'visits';
+              visitorSort.dir = 'desc';
+            }
+            renderVisitors();
+          });
+          document.getElementById('visitors-sort-last').addEventListener('click', function() {
+            if (visitorSort.key === 'last_visit') {
+              visitorSort.dir = visitorSort.dir === 'desc' ? 'asc' : 'desc';
+            } else {
+              visitorSort.key = 'last_visit';
+              visitorSort.dir = 'desc';
+            }
+            renderVisitors();
+          });
+
+          renderVisitors();
+
+          // Recent visitors
+          var tbody = document.getElementById('recent-tbody');
+          tbody.innerHTML = '';
+          (data.recent || []).forEach(function(v) {
+            var tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #f0ede6';
+            var time = '';
+            try { time = new Date(v.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }); } catch(e) {}
+            tr.innerHTML = '<td style="padding:6px 8px;white-space:nowrap;">' + time + '</td>'
+              + '<td style="padding:6px 8px;">' + escapeHtml(v.page) + '</td>'
+              + '<td style="padding:6px 8px;">' + escapeHtml(v.username) + '</td>';
+            tbody.appendChild(tr);
+          });
+          markShown('analytics', key);
+        })
+        .catch(function(err) {
+          console.error('Analytics load failed:', err);
+          // 会话 / 管理员密钥失效：和 loadSubmissions 走同一条路 —— 整页刷新回到密码门。
+          // isSessionExpired 对**预加载期**的 401 返回 false，所以不会在密码门前进死循环。
+          // 以前这里不区分，401 和网络错误一样被吞掉，面板全空且没有一句解释。
+          if (isSessionExpired(err)) { location.reload(); return; }
+          showAnalyticsError('Failed to load analytics — ' + ((err && err.message) || 'unknown error'));
+        })
+        .finally(function() {
+          if (loadingEl) loadingEl.hidden = true;
+        });
+    }
+
+    function loadAuditLogs(opts) {
+      var key = 'audit';
+      if (skipIfCached('audit', key, opts)) return Promise.resolve();
+      var list = document.getElementById('audit-log-list');
+      list.innerHTML = '<p>Loading...</p>';
+      // 原来的 `&_=` + Date.now() 是为了破 HTTP 缓存，cache:'no-store' 已经覆盖，去掉了时间戳
+      // 才能让 URL 稳定（fetchOnce 的 key 与 URL 分开，留着只是噪声）。
+      return fetchOnce(key, '/api/users?type=audit_logs', parseJSON, { noStore: true })
+        .then(function(data) {
+          if (!data || !data.logs) { markShown('audit', key); return; }
+          if (data.logs.length === 0) {
+            list.innerHTML = '<p style="color:var(--ink-faded);">No audit log entries yet.</p>';
+            return;
+          }
+          list.innerHTML = '';
+          var actionMeta = {
+            'ban':             { badge: 'BAN',      bg: '#c62828', color: '#fff',   verb: 'banned' },
+            'unban':           { badge: 'UNBAN',    bg: '#4a7c59', color: '#fff',   verb: 'unbanned' },
+            'set_role_admin':   { badge: 'ADMIN',    bg: '#F8D7DA', color: '#721C24', verb: 'set role of' },
+            'set_role_trusted': { badge: 'TRUSTED',  bg: '#D6EAF8', color: '#1A5276', verb: 'set role of' },
+            'set_role_user':    { badge: 'USER',     bg: '#D4EDDA', color: '#155724', verb: 'set role of' },
+          };
+
+          data.logs.forEach(function(entry) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--paper-light,#faf8f3);border:1px solid var(--border-warm,#e0d8cc);border-radius:var(--radius);margin-bottom:6px;font-size:13px;';
+
+            var meta = actionMeta[entry.action] || { badge: entry.action.toUpperCase(), bg: '#888', color: '#fff', verb: 'acted on' };
+
+            var actionBadge = document.createElement('span');
+            actionBadge.textContent = meta.badge;
+            actionBadge.style.cssText = 'font-weight:700;font-size:11px;padding:2px 8px;border-radius:3px;flex-shrink:0;' +
+              'background:' + meta.bg + ';color:' + meta.color + ';';
+
+            var detail = document.createElement('span');
+            detail.style.cssText = 'flex:1;min-width:0;';
+            var isRoleChange = entry.action.indexOf('set_role_') === 0;
+            if (isRoleChange) {
+              var roleName = entry.action.replace('set_role_', '');
+              detail.innerHTML = '<strong>' + escapeHtml(entry.admin_name) + '</strong> '
+                + 'set role of <strong>' + escapeHtml(entry.target_name) + '</strong> to ' + escapeHtml(roleName);
+            } else {
+              detail.innerHTML = '<strong>' + escapeHtml(entry.admin_name) + '</strong> '
+                + meta.verb + ' <strong>' + escapeHtml(entry.target_name) + '</strong>';
+            }
+
+            var time = document.createElement('span');
+            time.style.cssText = 'color:var(--ink-faded);font-size:12px;flex-shrink:0;white-space:nowrap;';
+            try {
+              time.textContent = new Date(entry.created_at).toLocaleString('en-US', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+            } catch(e) { time.textContent = entry.created_at || ''; }
+
+            row.appendChild(actionBadge);
+            row.appendChild(detail);
+            row.appendChild(time);
+            list.appendChild(row);
+          });
+          markShown('audit', key);
+        })
+        .catch(function(err) {
+          if (isSessionExpired(err)) { list.innerHTML = '<p>Access denied.</p>'; return; }
+          list.innerHTML = '<p style="color:var(--feedback-red);">Failed to load: ' + escapeHtml(err.message) + '</p>';
+        });
+    }
+
+    // --- Street View Modal ---
+    var SV_API_KEY = (window.__GEOCONFIG__ && window.__GEOCONFIG__.GOOGLE_MAPS_API_KEY) || '';
+    var _svModalInitDone = false;
+
+    /** Normalize streetview data to an array of valid {lat,lng,heading,pitch} objects */
+    function normalizeStreetViewList(raw) {
+      if (!raw) return [];
+      var arr = Array.isArray(raw) ? raw : (typeof raw.lat === 'number' ? [raw] : []);
+      return arr.filter(function(sv) { return sv && typeof sv.lat === 'number'; });
+    }
+
+    /** Render a single street view index into the review modal, reading state from overlay */
+    function _showReviewSvIndex(overlay, index) {
+      var list = overlay._svModalList || [];
+      if (index < 0 || index >= list.length) return;
+      overlay._svModalIndex = index;
+      var iframe = document.getElementById('sv-modal-iframe');
+      var counter = document.getElementById('sv-modal-counter');
+      var arrowLeft = document.getElementById('sv-modal-arrow-left');
+      var arrowRight = document.getElementById('sv-modal-arrow-right');
+      iframe.src = buildStreetViewUrl(list[index], SV_API_KEY);
+      counter.textContent = (index + 1) + ' / ' + list.length;
+      arrowLeft.classList.toggle('sv-modal-arrow--disabled', index === 0);
+      arrowRight.classList.toggle('sv-modal-arrow--disabled', index >= list.length - 1);
+    }
+
+    function openStreetViewModal(s) {
+      var list = normalizeStreetViewList(s.streetview);
+      var overlay = document.getElementById('sv-modal');
+      overlay._svModalList = list;
+      overlay._svModalIndex = 0;
+
+      var arrowLeft = document.getElementById('sv-modal-arrow-left');
+      var arrowRight = document.getElementById('sv-modal-arrow-right');
+      var counter = document.getElementById('sv-modal-counter');
+      var multi = list.length > 1;
+      arrowLeft.hidden = !multi;
+      arrowRight.hidden = !multi;
+      counter.hidden = !multi;
+
+      _showReviewSvIndex(overlay, 0);
+      overlay.hidden = false;
+
+      if (!_svModalInitDone) {
+        _svModalInitDone = true;
+        document.getElementById('sv-modal-close').addEventListener('click', function() {
+          overlay.hidden = true;
+          document.getElementById('sv-modal-iframe').src = '';
+        });
+        overlay.addEventListener('click', function(e) {
+          if (e.target === this) {
+            this.hidden = true;
+            document.getElementById('sv-modal-iframe').src = '';
+          }
+        });
+        arrowLeft.addEventListener('click', function() {
+          _showReviewSvIndex(overlay, (overlay._svModalIndex || 0) - 1);
+        });
+        arrowRight.addEventListener('click', function() {
+          _showReviewSvIndex(overlay, (overlay._svModalIndex || 0) + 1);
+        });
+      }
+    }
+  </script>
+
+  <div class="sv-modal-overlay" id="sv-modal" hidden>
+    <div class="sv-modal-container">
+      <button class="sv-modal-close" id="sv-modal-close">&times;</button>
+      <iframe id="sv-modal-iframe" class="sv-modal-iframe" allowfullscreen
+              loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+              title="Street View panorama"></iframe>
+      <button class="sv-modal-arrow sv-modal-arrow--left" id="sv-modal-arrow-left"
+              aria-label="Previous street view" hidden>&lsaquo;</button>
+      <button class="sv-modal-arrow sv-modal-arrow--right" id="sv-modal-arrow-right"
+              aria-label="Next street view" hidden>&rsaquo;</button>
+      <div class="sv-modal-counter" id="sv-modal-counter" hidden>1 / 1</div>
+    </div>
+  </div>
+<script>(function(){var p=location.pathname;fetch('/api/pageview?page='+encodeURIComponent(p),{method:'POST'})})();</script>
+</body>
+</html>

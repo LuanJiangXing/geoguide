@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- globe -->
+  <circle cx="32" cy="32" r="28" fill="#4A7C59" stroke="#3B6047" stroke-width="2.5"/>
+  <!-- meridians -->
+  <ellipse cx="32" cy="32" rx="12" ry="28" fill="none" stroke="#8DBF9A" stroke-width="1.8" opacity="0.7"/>
+  <line x1="4" y1="32" x2="60" y2="32" stroke="#8DBF9A" stroke-width="1.8" opacity="0.7"/>
+  <!-- map pin -->
+  <path d="M32 16c-6 0-11 4.5-11 10 0 7.5 11 22 11 22s11-14.5 11-22c0-5.5-5-10-11-10z" fill="#F4D35E" stroke="#C4A52A" stroke-width="1.8"/>
+  <circle cx="32" cy="26" r="4" fill="#C4A52A"/>
+</svg>

@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Explore — GeoGuide</title>
+  <meta name="description" content="Explore more region-guessing META on GeoGuide.">
+  <meta property="og:site_name" content="GeoGuide">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Explore — GeoGuide">
+  <meta property="og:description" content="Explore more region-guessing META on GeoGuide.">
+  <meta property="og:image" content="https://geoguide-gamma.vercel.app/images/og-geoguide.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Explore — GeoGuide">
+  <meta name="twitter:description" content="Explore more region-guessing META on GeoGuide.">
+  <meta name="twitter:image" content="https://geoguide-gamma.vercel.app/images/og-geoguide.png">
+  <meta name="theme-color" content="#4A7C59">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/icon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/icon-192.png">
+  <link rel="apple-touch-icon" href="/images/icon-192.png">
+  <!-- Warm up the CDN origins this page actually fetches from. Scripts are load-time and
+       block parsing, so they get a full preconnect (no `crossorigin` — classic <script> is a
+       no-cors fetch, and adding it would open a second, unused connection). Image origins are
+       only needed once content renders, so they get dns-prefetch instead of a connection that
+       would sit idle and be reaped. Credit links in the footer point at domains this page never
+       requests — they are deliberately absent. -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" />
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+  <script src="js/theme.js?v=3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css?v=171" />
+</head>
+<body class="app-page">
+  <nav class="nav">
+    <a href="/" class="nav__logo">GeoGuide</a>
+  </nav>
+  <div class="app-shell">
+    <!-- 地图区域 -->
+    <div class="map-shell">
+      <div id="map" role="application" aria-label="South Africa regional teaching map"></div>
+
+      <!-- 地图浮层工具:搜索 + 标签筛选。不再占一条工具栏 —— 它们浮在地图左上角,
+           排在 Leaflet 自己那列控件(缩放/重置/贡献者)的最上面。
+           层级靠 .map-tools 的 z-index(1001)压过 Leaflet(1000),两个组件自己都不设 z-index。 -->
+      <div class="map-tools" id="map-tools">
+        <div class="search-chip" id="map-search">
+          <button type="button" class="search-chip__toggle" id="map-search-toggle"
+                  aria-label="Search regions" aria-expanded="false" aria-controls="search-input"
+                  title="Search regions">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"/>
+            </svg>
+          </button>
+          <div class="search-chip__field" id="map-search-field" hidden>
+            <!-- maxlength 是为了防止粘贴一整段文字进来：搜索只按 region 名匹配，名字都很短，
+                 40 已经很宽裕，溢出部分本来也只会让输入框横向滚动、看不见内容。 -->
+            <input type="search" id="search-input" class="search-chip__input" placeholder="Search regions..."
+                   aria-label="Search by region name" autocomplete="off" maxlength="40" />
+            <button type="button" class="search-chip__clear" id="map-search-clear"
+                    aria-label="Clear search" title="Clear search" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <!-- 标签筛选的挂载点(由页面底部脚本填充) -->
+        <div class="tag-filter" id="tag-filters"></div>
+      </div>
+
+      <!-- 国家范围入口（scope === 'country'）。刻意**不做成 Leaflet 图层**：这类条目没有几何，
+           塞进 _polygonLayers 就会被 regionsAtPoint / pinAtPoint / 圆点收点那一整套几何语义
+           的逻辑接管，处处要加例外。做成宿主在地图容器上的固定浮层，几何那一侧就零改动 ——
+           这也是「现有区域的行为不回归」几乎自动成立的原因。
+           位置贴顶部正中：explore 一次只显示一个国家，屏幕上永远最多一个入口，固定位置保证
+           任何 zoom/pan 下都可见可点。
+           层级同 .map-tools：压过 Leaflet 的 1000，低于 .nav 的 1200 与 modal 的 1300/6000。 -->
+      <div class="country-meta-entry" id="country-meta-entry" hidden>
+        <button type="button" class="country-meta-entry__btn" id="country-meta-btn" hidden
+                aria-label="Country-wide guides">&#9733;</button>
+        <div class="country-meta-entry__empty" id="country-meta-empty" hidden>
+          <span id="country-meta-empty-text"></span>
+          <a href="/submit" id="country-meta-empty-link"></a>
+        </div>
+      </div>
+
+      <output id="filter-status" class="sr-only" aria-live="polite"></output>
+      <div id="load-error" class="load-error" hidden>
+        <div class="load-error__card">
+          <h2>Failed to load data</h2>
+          <p id="load-error-msg"></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 底部国家切换栏 -->
+    <div class="country-bar-row">
+      <button type="button" class="country-scroll country-scroll--left" id="country-scroll-left"
+              aria-label="Scroll countries left" hidden>&#8249;</button>
+      <div class="country-bar" id="country-bar" role="tablist" aria-label="Country switcher"></div>
+      <button type="button" class="country-scroll country-scroll--right" id="country-scroll-right"
+              aria-label="Scroll countries right" hidden>&#8250;</button>
+    </div>
+  </div>
+
+  <!-- 弹窗遮罩 -->
+  <div id="backdrop" class="backdrop" hidden aria-hidden="true"></div>
+
+  <!-- 详情弹窗 -->
+  <div id="modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" tabindex="-1" hidden>
+    <div class="modal__header">
+      <div>
+        <h2 class="modal__title" id="modal-title"></h2>
+        <div class="modal__meta">
+          <div class="modal__submitted" id="modal-submitted"></div>
+        </div>
+      </div>
+      <button class="modal__close" id="modal-close" aria-label="Close dialog">&times;</button>
+    </div>
+    <div class="modal__body">
+      <div class="modal__left">
+        <div class="modal__tags" id="modal-tags"></div>
+        <div class="modal__desc" id="modal-desc"></div>
+        <div class="modal__gallery" id="modal-gallery"></div>
+        <div class="modal__source" id="modal-source"></div>
+      </div>
+      <div class="modal__right" id="modal-streetview">
+        <div class="modal__streetview-hint">Click a region to view Street View</div>
+        <div id="sv-key-catcher" class="sv-key-catcher" tabindex="0"></div>
+
+        <!-- Carousel -->
+        <div class="sv-carousel" id="sv-carousel">
+          <button class="sv-carousel__arrow sv-carousel__arrow--left" id="sv-arrow-left"
+                  aria-label="Previous street view" hidden>&lsaquo;</button>
+          <div class="sv-carousel__viewport" id="sv-viewport">
+            <div id="streetview-pano" class="modal__iframe" role="img"
+                 aria-label="Google Street View panorama" hidden></div>
+            <div class="sv-placeholder" id="sv-placeholder" hidden>
+              <div class="sv-placeholder__icon" aria-hidden="true">&#9888;</div>
+              <p class="sv-placeholder__text">Unable to load this<br>Street View</p>
+              <a class="sv-placeholder__link" id="sv-placeholder-link" href="#"
+                 target="_blank" rel="noopener noreferrer">Open in Google Maps &#8599;</a>
+            </div>
+          </div>
+          <button class="sv-carousel__arrow sv-carousel__arrow--right" id="sv-arrow-right"
+                  aria-label="Next street view" hidden>&rsaquo;</button>
+        </div>
+
+        <!-- Page counter -->
+        <div class="sv-counter" id="sv-counter" hidden>1 / 1</div>
+
+        <!-- Dot indicators -->
+        <div class="sv-dots" id="sv-dots" hidden></div>
+
+        <div class="fs-exit-hint">Press F for fullscreen</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 重叠条目标签栏：挂在弹窗左上角外侧（fixed 兄弟元素，不进 .modal，避免被 overflow:hidden 裁掉）。
+       行本身钉在弹窗左右两缘，宽度因此恒等于弹窗宽；滚动下沉到 track，箭头在行内、不随内容移动。
+       role="tablist" 挂在 track 上 —— 行里还有两个非 tab 的滚动按钮，放进 tablist 是语义错误。 -->
+  <div id="overlap-tabs" class="overlap-tabs" hidden>
+    <button type="button" class="overlap-tabs__nav" id="overlap-tabs-left"
+            aria-label="Scroll tabs left" hidden>&#8249;</button>
+    <div class="overlap-tabs__track" id="overlap-tabs-track"
+         role="tablist" aria-label="Overlapping regions"></div>
+    <button type="button" class="overlap-tabs__nav" id="overlap-tabs-right"
+            aria-label="Scroll tabs right" hidden>&#8250;</button>
+  </div>
+
+  <script src="js/auth.js?v=12"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
+  <script src="https://unpkg.com/leaflet.gridlayer.googlemutant@0.16.0/dist/Leaflet.GoogleMutant.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="js/utils.js?v=28"></script>
+  <script src="js/map.js?v=87"></script>
+  <script src="js/basemap.js?v=3"></script>
+  <script src="js/contributors.js?v=7"></script>
+  <script src="js/modal.js?v=59"></script>
+  <script src="js/compare.js?v=11"></script>
+  <script src="js/search.js?v=13"></script>
+  <script src="js/app.js?v=16"></script>
+  <script>
+  // Fetch tags from the API and render the filter panel:
+  // one icon button (with a selected-count badge) opening a panel with one column per category.
+  // 放大镜与筛选在 HTML 里就存在，而 zoom/reset/contributors 要等 Leaflet 下载完才建 ——
+  // 不等一下就会先看到这两个浮在空地图上。map.js 装完控件派发 mapready，这里放行。
+  // **必须在 parse 阶段同步注册**：map.js 的 initMap 在 DOMContentLoaded 里跑，那时本脚本早已执行完，
+  // 晚注册会漏掉这一次事件 —— 而那是唯一一次，漏了就永远藏着。
+  document.addEventListener('mapready', function() {
+    var tools = document.getElementById('map-tools');
+    if (tools) tools.classList.add('is-ready');
+  });
+
+  (function() {
+    var root = document.getElementById('tag-filters');
+    if (!root) return;
+
+    var selectedTags = {};     // { categoryName: [tagName, ...] } — single source of truth
+    var _catCheckboxes = {};   // categoryName -> [checkbox, ...]
+    var _catAllCheckbox = {};  // categoryName -> select-all checkbox
+    var _catRows = {};         // categoryName -> [{ name, label }, ...] — 逐行显隐要的「名字 → 行」映射
+    var _catCols = {};         // categoryName -> <section> — 整列显隐（该国一个标签都没有时）
+    // categoryName -> [当前国家可见的标签名]。**不是**该类别的完整目录：它同时是「全选」的
+    // 分母与取值来源，所以必须是可见集合，否则全选会勾上当前国家根本没有、面板里也看不见的
+    // 标签（然后 R3 又把它们拉回可见，自相矛盾），且分母对不上会让 indeterminate 永远算不对。
+    var _catVisibleTagNames = {};
+    var panelBuilt = false;    // 事件先于面板构建到达时直接 no-op（构建路径自己会算一次）
+
+    // --- 入口按钮:三条滑杆(geoguessr preferences 同款,内联以免外链/新请求) ---
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'tag-filter-toggle';
+    btn.className = 'tag-filter__toggle';
+    btn.setAttribute('aria-haspopup', 'true');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-label', 'Filter by tag');
+    btn.title = 'Filter by tag';
+    btn.innerHTML =
+      '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+        '<path d="M23,3H12v2h11c.552,0,1-.448,1-1s-.448-1-1-1Z"/>' +
+        '<path d="M1,5H6v2c0,.552,.448,1,1,1h2c.552,0,1-.448,1-1V1c0-.552-.448-1-1-1h-2c-.552,0-1,.448-1,1V3H1c-.552,0-1,.448-1,1s.448,1,1,1Z"/>' +
+        '<path d="M23,19H12v2h11c.552,0,1-.448,1-1s-.448-1-1-1Z"/>' +
+        '<path d="M1,21H6v2c0,.552,.448,1,1,1h2c.552,0,1-.448,1-1v-6c0-.552-.448-1-1-1h-2c-.552,0-1,.448-1,1v2H1c-.552,0-1,.448-1,1s.448,1,1,1Z"/>' +
+        '<path d="M23,11h-3v2h3c.552,0,1-.448,1-1s-.448-1-1-1Z"/>' +
+        '<path d="M1,13H14v2c0,.552,.448,1,1,1h2c.552,0,1-.448,1-1v-6c0-.552-.448-1-1-1h-2c-.552,0-1,.448-1,1v2H1c-.552,0-1,.448-1,1s.448,1,1,1Z"/>' +
+      '</svg>' +
+      '<span class="tag-filter__badge" hidden></span>';
+    var badge = btn.querySelector('.tag-filter__badge');
+
+    var panel = document.createElement('div');
+    panel.id = 'tag-filter-panel';
+    panel.className = 'tag-filter__panel';
+    panel.hidden = true;
+    panel.setAttribute('role', 'region');
+    panel.setAttribute('aria-label', 'Filter by tag');
+
+    root.appendChild(btn);
+    root.appendChild(panel);
+
+    function setOpen(open) {
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (open && typeof closeContributorsPanel === 'function') {
+        closeContributorsPanel();
+      }
+    }
+    window.closeTagFilterPanel = function() {
+      setOpen(false);
+    };
+
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var willOpen = panel.hidden;
+      if (willOpen && typeof closeContributorsPanel === 'function') {
+        closeContributorsPanel();
+      }
+      setOpen(willOpen);
+    });
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape' || panel.hidden) return;
+      setOpen(false);
+      btn.focus();
+    });
+    document.addEventListener('click', function(e) {
+      if (panel.hidden) return;
+      if (btn.contains(e.target) || panel.contains(e.target)) return;
+      setOpen(false);
+    });
+
+    /** 角标 = 跨类别已选标签总数 */
+    function refreshBadge() {
+      var n = 0;
+      Object.keys(selectedTags).forEach(function(c) { n += selectedTags[c].length; });
+      badge.textContent = n ? String(n) : '';
+      badge.hidden = n === 0;
+      btn.classList.toggle('is-active', n > 0);
+    }
+
+    function syncAllCheckbox(catName) {
+      var allCb = _catAllCheckbox[catName];
+      if (!allCb) return;
+      var sel = selectedTags[catName] || [];
+      // 分母是**当前可见**的标签，不是该类别的完整目录（见 _catVisibleTagNames 的说明）。
+      var total = (_catVisibleTagNames[catName] || []).length;
+      if (sel.length === 0) {
+        allCb.checked = false;
+        allCb.indeterminate = false;
+      } else if (sel.length === total) {
+        allCb.checked = true;
+        allCb.indeterminate = false;
+      } else {
+        allCb.checked = false;
+        allCb.indeterminate = true;
+      }
+    }
+
+    /**
+     * 当前国家覆盖的标签命中数：{ "Category:tagName": count }。
+     *
+     * 数据源是**前端已经加载好的** region（每层挂 `._region`，`region.tags` 是标签名字符串
+     * 数组），所以不发任何请求 —— /api/tags 给的是全库目录，不收窄、也不返回命中数。
+     * 只看当前国家（`_countryVisible !== false`）；按分类作用域逐个计数，父子标签一视同仁。
+     */
+    function computeLiveCounts() {
+      var counts = Object.create(null);
+      if (!window._polygonLayers || !window._polygonLayers.forEach) return counts;
+      var legacyMap = window._legacyTagToCats || {};
+      window._polygonLayers.forEach(function(layer) {
+        var r = layer && layer._region;
+        if (!r || r._countryVisible === false) return;
+        (r.tags || []).forEach(function(t) {
+          var p = typeof parseTag === 'function' ? parseTag(t) : { category: null, name: t };
+          if (p.category) {
+            var key = p.category + ':' + p.name;
+            counts[key] = (counts[key] || 0) + 1;
+          } else {
+            var cats = legacyMap[p.name];
+            if (cats && cats.length) {
+              cats.forEach(function(c) {
+                var key = c + ':' + p.name;
+                counts[key] = (counts[key] || 0) + 1;
+              });
+            } else {
+              counts[p.name] = (counts[p.name] || 0) + 1;
+            }
+          }
+        });
+      });
+      return counts;
+    }
+
+    /**
+     * 按当前国家收窄标签面板：命中数 > 0 的标签可见，已勾选的即使命中为 0 也保持可见
+     * （否则用户会遇到「明明选着它、却找不到在哪取消」）。整个类别一个可用标签都没有时整列隐藏。
+     *
+     * 由两个时机驱动：面板构建完成后一次（首屏就位），以及每次切国家时 map.js 派发的那个
+     * 事件。搜索/勾选**有意不触发** —— 那是逐字/逐个的瞬时行为，每次重排标签列会让面板
+     * 跳个不停；国家切换才是稳定、明确的导航动作。
+     */
+    function refreshTagAvailability() {
+      if (!panelBuilt) return;   // 面板还没建好：构建路径自己会算一次，这里不能报错
+      // 就绪守卫 —— `_polygonLayers` 空时命中数必然全为 0，照常收窄会把整个面板清空。
+      // 要区分「数据还没到」与「数据里没有这个标签」：前者跳过收窄，等事件到达再算。
+      if (!window._polygonLayers || !window._polygonLayers.size) return;
+
+      var counts = computeLiveCounts();
+      var legacyMap = window._legacyTagToCats || {};
+
+      var visibleCatCount = 0;
+      Object.keys(_catRows).forEach(function(catName) {
+        var visibleNames = [];
+        var catChecked = selectedTags[catName] || [];
+        _catRows[catName].forEach(function(row) {
+          var scopedKey = catName + ':' + row.name;
+          var scopedCount = counts[scopedKey] || (!legacyMap[row.name] ? (counts[row.name] || 0) : 0);
+          var isChecked = catChecked.indexOf(row.name) !== -1;
+          var show = scopedCount > 0 || isChecked;
+          row.label.hidden = !show;
+          if (show) visibleNames.push(row.name);
+        });
+        _catVisibleTagNames[catName] = visibleNames;
+        if (_catCols[catName]) {
+          var hasVisible = visibleNames.length > 0;
+          _catCols[catName].hidden = !hasVisible;
+          if (hasVisible) visibleCatCount++;
+        }
+        syncAllCheckbox(catName);
+      });
+
+      var emptyMsg = panel.querySelector('.tag-filter__empty');
+      var clearBtn = panel.querySelector('.tag-filter__clear');
+      if (emptyMsg) {
+        emptyMsg.hidden = visibleCatCount > 0;
+      }
+      if (clearBtn) {
+        var hasActiveFilters = false;
+        Object.keys(selectedTags).forEach(function(k) {
+          if (selectedTags[k] && selectedTags[k].length) hasActiveFilters = true;
+        });
+        clearBtn.hidden = visibleCatCount === 0 && !hasActiveFilters;
+      }
+
+      // 动态自适应调整面板宽度：按可见列数紧凑适配，避免少标签时留白过大
+      if (visibleCatCount === 0) {
+        panel.style.width = 'min(240px, calc(100vw - 24px))';
+      } else if (visibleCatCount >= 6) {
+        panel.style.width = '';
+      } else {
+        var w = Math.min(860, Math.max(190, visibleCatCount * 136 + 42));
+        panel.style.width = 'min(' + w + 'px, calc(100vw - 24px))';
+      }
+    }
+
+    /**
+     * 标签归零：清空 selectedTags、把所有复选框（含各类别的「全选」）打回未选，再同步角标与筛选。
+     * 两个调用点：面板里的 Clear filters 按钮，以及**换国家**（见下面的 countryfilter:change）。
+     */
+    function resetTagFilters() {
+      Object.keys(selectedTags).forEach(function(k) { delete selectedTags[k]; });
+      panel.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+        cb.checked = false;
+        cb.indeterminate = false;
+      });
+      refreshBadge();
+      applyTagFilters();
+      // 勾选清空后要重算一次：那些只是「因为被勾着才可见」、而当前国家并没有的标签，到这里
+      // 就该恢复隐藏，否则面板会停留在被 R3 撑开的状态上。
+      refreshTagAvailability();
+    }
+
+    function applyTagFilters() {
+      // Collect all selected tag names (flattened)
+      var allTags = [];
+      Object.keys(selectedTags).forEach(function(cat) {
+        allTags = allTags.concat(selectedTags[cat]);
+      });
+      // Set globals for search.js to read (grouped + flattened)
+      window._selectedTags = allTags;
+      window._selectedTagsByCategory = selectedTags;
+      var event = new CustomEvent('tagfilter:change', {
+        detail: { tags: allTags, tagsByCategory: selectedTags }
+      });
+      document.dispatchEvent(event);
+    }
+
+    /** 面板内单个类别列:标题 + 全选行 + 复选框列表(子标签缩进) */
+    function buildColumn(cat) {
+      var catName = cat.name;
+
+      // Collect every tag in this category (recursive, incl. children)
+      var allTagNames = [];
+      function collectTags(tag) {
+        allTagNames.push(tag.name);
+        if (tag.children && tag.children.length) tag.children.forEach(collectTags);
+      }
+      (cat.tags || []).forEach(collectTags);
+      _catCheckboxes[catName] = [];
+      _catRows[catName] = [];
+      // 未收窄时「可见集合 = 完整目录」。就绪守卫跳过收窄的那条路径（面板比 region 先就绪）
+      // 也必须有一个正确的分母：留空的话「全选」会去勾一个空集合 —— 行被勾上、selectedTags
+      // 却是空数组，syncAllCheckbox 立刻又把「全选」打回未选中，该类别就此失灵。
+      // refreshTagAvailability 拿得到数据时会用真正的可见子集覆盖它。
+      _catVisibleTagNames[catName] = allTagNames.slice();
+
+      var col = document.createElement('section');
+      col.className = 'tag-filter__col';
+      _catCols[catName] = col;
+
+      var title = document.createElement('h3');
+      title.className = 'tag-filter__col-title';
+      title.textContent = catName;
+      col.appendChild(title);
+
+      var list = document.createElement('div');
+      list.className = 'tag-filter__list';
+
+      // 全选行(该类别全部标签,含子标签)
+      var allLabel = document.createElement('label');
+      allLabel.className = 'tag-filter__item tag-filter__item--all';
+      var allCb = document.createElement('input');
+      allCb.type = 'checkbox';
+      allCb.value = '__all__';
+      allCb.addEventListener('change', function() {
+        if (allCb.checked) {
+          // 「全选」= 当前**可见**的标签，不是该类别的完整目录（见 _catVisibleTagNames）。
+          selectedTags[catName] = (_catVisibleTagNames[catName] || []).slice();
+        } else {
+          delete selectedTags[catName];
+        }
+        // 只勾当前**可见**的行。被国家收窄隐藏的行不属于「全选」的语义（R5），给它们打勾会
+        // 让复选框状态与 selectedTags 脱节 —— 切到有该标签的国家时，行会以「已勾选」的样子
+        // 出现却根本没参与筛选。隐藏 ⇒ 未勾选 是本面板的固有不变式（R3 保证勾着的一定可见）。
+        _catCheckboxes[catName].forEach(function(c) {
+          var item = c.closest('.tag-filter__item');
+          c.checked = allCb.checked && !(item && item.hidden);
+        });
+        syncAllCheckbox(catName);
+        refreshBadge();
+        applyTagFilters();
+      });
+      allLabel.appendChild(allCb);
+      allLabel.appendChild(document.createTextNode(' All'));
+      list.appendChild(allLabel);
+      _catAllCheckbox[catName] = allCb;
+
+      function renderTagRow(tag, depth) {
+        var label = document.createElement('label');
+        label.className = 'tag-filter__item';
+        // 子标签缩进。深度来自数据,所以走自定义属性而不是类 —— 类名没法表达任意层级。
+        if (depth > 0) label.style.setProperty('--tag-indent', (12 + depth * 12) + 'px');
+        var cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = tag.name;
+        _catCheckboxes[catName].push(cb);
+        cb.addEventListener('change', function() {
+          if (cb.checked) {
+            if (!selectedTags[catName]) selectedTags[catName] = [];
+            if (selectedTags[catName].indexOf(tag.name) === -1) selectedTags[catName].push(tag.name);
+          } else {
+            if (selectedTags[catName]) {
+              selectedTags[catName] = selectedTags[catName].filter(function(t) { return t !== tag.name; });
+              if (!selectedTags[catName].length) delete selectedTags[catName];
+            }
+          }
+          syncAllCheckbox(catName);
+          refreshBadge();
+          applyTagFilters();
+        });
+        label.appendChild(cb);
+        label.appendChild(document.createTextNode(' ' + tag.name));
+        list.appendChild(label);
+        // 行注册表：refreshTagAvailability 靠它逐行显隐（这是全仓唯一的「名字 → 行元素」映射）
+        _catRows[catName].push({ name: tag.name, label: label });
+
+        // Render children with increased depth
+        if (tag.children && tag.children.length > 0) {
+          tag.children.forEach(function(child) {
+            renderTagRow(child, depth + 1);
+          });
+        }
+      }
+      (cat.tags || []).forEach(function(tag) {
+        renderTagRow(tag, 0);
+      });
+
+      col.appendChild(list);
+      return col;
+    }
+
+    function renderPanel(categories) {
+      var cols = document.createElement('div');
+      cols.className = 'tag-filter__cols';
+      categories.forEach(function(cat) {
+        if (!cat.tags || !cat.tags.length) return;
+        cols.appendChild(buildColumn(cat));
+      });
+      panel.appendChild(cols);
+
+      var clearBtn = document.createElement('button');
+      clearBtn.type = 'button';
+      clearBtn.className = 'tag-filter__clear';
+      clearBtn.textContent = 'Clear filters';
+      clearBtn.addEventListener('click', resetTagFilters);
+      panel.appendChild(clearBtn);
+
+      var emptyMsg = document.createElement('div');
+      emptyMsg.className = 'tag-filter__empty';
+      emptyMsg.textContent = 'No tags for this country';
+      emptyMsg.hidden = true;
+      panel.appendChild(emptyMsg);
+
+      // 首屏就位：面板一建好就按当前国家算一次，不用等用户切国家（?country=X 直接进的
+      // 页面也在这一趟里收窄 —— 构建前到达的切国家事件已被 panelBuilt 挡掉）。
+      panelBuilt = true;
+      refreshTagAvailability();
+    }
+
+    // 切国家 → 重算标签可见性。这条监听**必须**在 IIFE 顶层立即注册（不能等 /api/tags
+    // resolve 才挂）：map.js 的 initCountryTabs 在 DOMContentLoaded 里就调 switchCountry，
+    // 那时本脚本早已同步跑完，晚注册会让首屏那次切换静默丢事件（?country=X 便收窄不了）。
+    // 换国家 → **标签一律归零**，再按新国家重算可见性。
+    //
+    // 为什么归零：标签是按国家分布的，上一个国家勾的标签在新国家往往一个都不存在。留着它，
+    // 筛选会静默失效 —— 地图空了，而面板里看不出原因（那一行被 R3 撑成「因为勾着所以可见」，
+    // 反倒显得还在生效）。「换国家即回到初始」比「跨国家继承勾选」可预期得多。
+    //
+    // 靠自己记上一个国家名来分辨，而不是往事件里加字段：`switchCountry` 点当前已激活的那个
+    // 标签时也会被再调一次、事件照发，但手滑点一下就把选好的标签清空太意外 —— 那不算「换国家」。
+    var _lastCountry = null;
+    document.addEventListener('countryfilter:change', function(e) {
+      var country = e.detail && e.detail.country;
+      if (_lastCountry !== null && country !== _lastCountry) {
+        resetTagFilters();   // 内部已含 refreshTagAvailability()，且顺序正是「先归零再收窄」
+      } else {
+        refreshTagAvailability();
+      }
+      _lastCountry = country;
+    });
+
+    // Fetch tags
+    fetch('/api/tags')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data && data.categories) {
+          // Build tag → children maps and legacy tag → categories map
+          var childrenMap = {};
+          var scopedChildrenMap = {};
+          var legacyTagToCats = {};
+
+          data.categories.forEach(function(cat) {
+            function indexTag(t) {
+              if (!t || !t.name) return;
+              var n = t.name;
+              if (!legacyTagToCats[n]) legacyTagToCats[n] = [];
+              if (legacyTagToCats[n].indexOf(cat.name) === -1) legacyTagToCats[n].push(cat.name);
+              if (t.children && t.children.length > 0) {
+                childrenMap[n] = t.children.map(function(c) { return c.name; });
+                scopedChildrenMap[cat.name + ':' + n] = t.children.map(function(c) { return c.name; });
+                t.children.forEach(indexTag);
+              }
+            }
+            (cat.tags || []).forEach(indexTag);
+          });
+          window._tagChildrenMap = childrenMap;
+          window._scopedChildrenMap = scopedChildrenMap;
+          window._legacyTagToCats = legacyTagToCats;
+
+          renderPanel(data.categories);
+        }
+      })
+      .catch(function(e) {
+        console.error('Failed to load tags:', e);
+        // 面板是唯一放得下这条消息的地方 —— 别写 root.innerHTML,那会把按钮一起删掉。
+        panel.innerHTML = '<span style="color:var(--ink-faded);">Tags unavailable</span>';
+        setOpen(true);
+      });
+  })();
+
+  </script>
+<script src="js/search-chip.js?v=2"></script>
+<script>(function(){var p=location.pathname;fetch('/api/pageview?page='+encodeURIComponent(p),{method:'POST'})})();</script>
+</body>
+</html>

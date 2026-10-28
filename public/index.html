@@ -1,0 +1,2349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GeoGuide</title>
+  <meta name="description" content="Explore more region-guessing META on GeoGuide.">
+  <meta property="og:site_name" content="GeoGuide">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="GeoGuide — Regional Clues for GeoGuessr">
+  <meta property="og:description" content="Explore more region-guessing META on GeoGuide.">
+  <meta property="og:image" content="https://geoguide-gamma.vercel.app/images/og-geoguide.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="GeoGuide — Regional Clues for GeoGuessr">
+  <meta name="twitter:description" content="Explore more region-guessing META on GeoGuide.">
+  <meta name="twitter:image" content="https://geoguide-gamma.vercel.app/images/og-geoguide.png">
+  <meta name="theme-color" content="#4A7C59">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="/images/icon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/icon-192.png">
+  <link rel="apple-touch-icon" href="/images/icon-192.png">
+  <!-- Warm up the CDN origins this page actually fetches from. Scripts are load-time and
+       block parsing, so they get a full preconnect (no `crossorigin` — classic <script> is a
+       no-cors fetch, and adding it would open a second, unused connection). Image origins are
+       only needed once content renders, so they get dns-prefetch instead of a connection that
+       would sit idle and be reaped. Credit links in the footer point at domains this page never
+       requests — they are deliberately absent. -->
+  <link rel="dns-prefetch" href="https://flagcdn.com" />
+  <script src="js/theme.js?v=3"></script>
+  <link rel="stylesheet" href="css/style.css?v=171" />
+  <script>
+    // Batch 1 — cards/map core data: countries only, render as soon as it arrives
+    window.__homeDataCore = fetch('/api/countries').then(function(r) { return r.json(); });
+    // Contributors for hero stats & constellation: small fast JSON (~79ms), preloaded in head
+    window.__homeContribData = fetch('/api/submissions?action=contributors&limit=0').then(function(r) { return r.json(); }).catch(function() { return { contributors: [] }; });
+    // Batch 2 — remaining homepage sections: render together only after all arrive.
+    //
+    // 末尾那个 __homeDataCore 只为了**定序**，它的结果没人用：Batch 2 的渲染代码要读
+    // Batch 1 写下的 window._countryMap（地区卡片的国名与国旗都取自它），而两个 batch
+    // 原本是互相独立的 promise，没有任何先后保证。countries 稍慢一点，map 就还是空的，
+    // 地区名会退化成 slug、国旗也不渲染。
+    //
+    // 这**不会**让请求串行：几个 fetch 在上面同一 tick 就都发出去了，这里只是让「渲染」
+    // 多等一个通常最先回来的结果。必须留在数组末尾 —— 下面代码按下标取 results[0..3]。
+    // 必须带 catch：否则 countries 一失败就会把整个 Batch 2 一起 reject 掉
+    //（Recent Updates / Most Useful / Most Contributed / Site Updates 全都渲染不出来）。
+    window.__homeDataRest = Promise.all([
+      // order=approved：按**首次通过时间**排（api/submissions.js 的两条排序子句之一）。
+      // 只有首页用这个参数 —— explore 走同一个接口但不传，拿到的数组顺序一字不变。
+      fetch('/api/submissions?order=approved').then(function(r) { return r.json(); }).catch(function() { return []; }),
+      fetch('/api/reactions?action=top').then(function(r) { return r.json(); }).catch(function() { return { regions: [] }; }),
+      // limit=0 表示不加 LIMIT（api/submissions.js:18），一次取回全部贡献者给星图用。
+      // 这**不新增请求** —— 复用 head 里已发起的 window.__homeContribData。
+      window.__homeContribData,
+      fetch('data/changelog.json').then(function(r) { return r.json(); }).catch(function() { return []; }),
+      window.__homeDataCore.catch(function() { return null; })
+    ]);
+  </script>
+</head>
+<body class="allow-scroll">
+  <nav class="nav">
+    <a href="/" class="nav__logo">GeoGuide</a>
+  </nav>
+
+  <main class="hero">
+    <div class="hero__content">
+      <h1 class="hero__title">GeoGuide</h1>
+      <p class="hero__subtitle">Just take what you need and be on your way.</p>
+      <div class="hero__stats" id="hero-stats" hidden>
+        <div class="hero__stats-count">
+          <span class="hero__stats-num" id="hero-meta-count"></span>
+          <span class="hero__stats-label">metas</span>
+        </div>
+        <span class="hero__stats-dot" aria-hidden="true">&middot;</span>
+        <div class="hero__stats-flags" id="hero-top-countries" role="button" tabindex="0" title="Click to view map"></div>
+        <span class="hero__stats-dot" aria-hidden="true">&middot;</span>
+        <div class="hero__stats-avatars" id="hero-top-contributors" role="button" tabindex="0" title="Click to view contributors"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 视图切换：方框式 / 地图式 -->
+  <div class="view-toggle" id="view-toggle" role="tablist" aria-label="Choose country view" hidden>
+    <button type="button" class="view-toggle__btn is-active" id="view-map-btn" role="tab" aria-selected="true">Map</button>
+    <button type="button" class="view-toggle__btn" id="view-cards-btn" role="tab" aria-selected="false">Cards</button>
+  </div>
+
+  <!-- 世界地图视图 -->
+  <section class="world-map" id="world-map" hidden>
+    <div class="world-map__svg" id="world-map-svg"></div>
+    <div class="world-map__legend">
+      <span class="world-map__legend-dot world-map__legend-dot--green"></span> Has content
+      <span class="world-map__legend-dot world-map__legend-dot--gray"></span> No regions yet
+    </div>
+  </section>
+
+  <section class="countries" id="countries" hidden>
+    <div class="countries__grid" id="country-grid"></div>
+  </section>
+
+  <!-- Proposal Modal -->
+  <div id="proposal-backdrop" class="proposal-backdrop" hidden aria-hidden="true"></div>
+  <div id="proposal-modal" class="proposal-modal" role="dialog" aria-modal="true" aria-labelledby="proposal-modal-title" hidden>
+    <div class="proposal-modal__header">
+      <h3 id="proposal-modal-title">Propose a New Country / Region</h3>
+      <button class="proposal-modal__close" id="proposal-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div class="proposal-modal__body">
+      <div class="proposal-section">
+        <label for="proposal-country-select">Country</label>
+        <p class="proposal-hint">Select from the list. Don't see it? It may already be on GeoGuide.</p>
+        <select id="proposal-country-select" style="width:100%;">
+          <option value="">-- Select a country --</option>
+        </select>
+      </div>
+      <div class="proposal-divider"><span>or</span></div>
+      <div class="proposal-section">
+        <label for="proposal-region">Region</label>
+        <p class="proposal-hint">e.g. Alaska / Nordics / South-East Asia, etc. Max 20 characters.</p>
+        <input type="text" id="proposal-region" maxlength="20" placeholder="Enter region name" />
+      </div>
+      <div class="proposal-divider"></div>
+      <div class="proposal-section">
+        <label>Your goal</label>
+        <div class="proposal-meta-toggle" id="proposal-meta-toggle" role="radiogroup" aria-label="Meta goal">
+          <button type="button" class="meta-toggle-btn" data-value="provide" aria-pressed="false">Provide meta</button>
+          <button type="button" class="meta-toggle-btn" data-value="learn" aria-pressed="false">Learn meta</button>
+        </div>
+      </div>
+      <div class="proposal-divider"></div>
+      <div class="proposal-section">
+        <label for="proposal-reason">Reason (optional)</label>
+        <p class="proposal-hint">Why should this country or region be added? Max 60 characters.</p>
+        <textarea id="proposal-reason" maxlength="60" rows="2" placeholder="Brief reason..."></textarea>
+      </div>
+      <div class="proposal-modal__actions">
+        <button id="proposal-cancel-btn" class="modal-btn modal-btn--ghost">Cancel</button>
+        <button id="proposal-submit-btn" class="modal-btn modal-btn--primary">Submit Proposal</button>
+      </div>
+      <div id="proposal-error" style="color:var(--feedback-red);font-size:13px;margin-top:8px;display:none;"></div>
+    </div>
+  </div>
+
+  <section class="recent-updates" id="most-useful" hidden>
+    <h2 class="recent-updates__title">Most Useful Meta</h2>
+    <div class="useful-carousel">
+      <div class="useful-carousel__viewport" id="useful-viewport">
+        <div class="useful-carousel__track" id="useful-track"></div>
+      </div>
+    </div>
+    <div class="recent-updates__loading" id="useful-loading">
+      <span>Loading...</span>
+    </div>
+    <div class="recent-updates__empty" id="useful-empty" hidden>
+      <span>No highly-rated regions yet.</span>
+    </div>
+  </section>
+
+  <section class="recent-updates" id="most-contributed" hidden>
+    <!-- 标题 + 一个说明按钮。滑杆面板与它的开关是刻意移除的（参数已锁定，见脚本里的
+         CONFIG），但头部重新需要样式了：标题与按钮横排，按钮开合一块说明面板。
+         弹窗与星图本身无关，所以由独立的一小段脚本驱动（星图没数据时整块不初始化，
+         说明按钮却应该照常可用）。 -->
+    <div class="constellation__header">
+      <h2 class="recent-updates__title">Contributors</h2>
+      <div class="constellation__info">
+        <button type="button" class="constellation__info-btn" id="constellation-info-btn"
+                aria-label="About this star map" aria-expanded="false"
+                aria-controls="constellation-info-panel">
+          <!-- Feather "info"，与全站图标同一套；stroke 用 currentColor 以继承按钮变色 -->
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true" focusable="false">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+        <div class="constellation__info-panel" id="constellation-info-panel" hidden>
+          <p class="constellation__info-title">Contributors</p>
+          <p>The 20 contributors with the most approved submissions. Each disc is sized
+             by that contributor's submission count, and the flags underneath are the
+             countries they have contributed to most.</p>
+          <p>Flags come from flagcdn.com and avatars from Discord.</p>
+        </div>
+      </div>
+    </div>
+    <!-- 星图本体。空贡献者时整块藏起来，只留标题与 empty 文案。
+         参数锁死（贡献者 20 / 速度 0.3 / 尺寸 1.0 / 连线 150px），不再有 tuning UI。 -->
+    <div class="constellation" id="constellation-root">
+      <div class="constellation__stage" id="constellation-stage">
+        <canvas id="constellation-canvas"></canvas>
+      </div>
+    </div>
+    <!-- R7：画布上的文字对屏幕阅读器不存在。换掉真实列表就必须补一份 .sr-only 名单，
+         否则贡献者名册会从可访问性树里被整个删掉 —— 那是功能回归，不是装饰问题。
+         沿用原 id：index.html 里其他引用（以及"它仍然表示贡献者名单"）都不必改名。 -->
+    <ul class="sr-only" id="contributed-list"></ul>
+    <div class="recent-updates__loading" id="contributed-loading">
+      <span>Loading...</span>
+    </div>
+    <div class="recent-updates__empty" id="contributed-empty" hidden>
+      <span>No top contributors yet.</span>
+    </div>
+  </section>
+
+  <!-- 顺序是 most-useful → most-contributed → recent-updates → site-updates。
+       整块搬过来即可：所有引用都是 getElementById，style.css 里也没有针对这些
+       section 的兄弟（+ / ~）或 nth-child 选择器。 -->
+  <section class="recent-updates" id="recent-updates" hidden>
+    <!-- 标题与筛选同一行。按钮直接复用首页 map/cards 的 .view-toggle__btn，所以配色、
+         边框、选中态与那块同源；.recent-updates__filter 只覆盖 .view-toggle 那套
+         "居中、独占一行" 的布局属性（max-width / margin / padding / justify-content）。
+         标题原有的 16px 下边距改由这一行自己接管，否则行高会多出 16px。 -->
+    <div class="recent-updates__header">
+      <h2 class="recent-updates__title">Recent Updates</h2>
+      <div class="view-toggle recent-updates__filter" id="recent-filter" role="tablist" aria-label="Filter recent updates">
+        <button type="button" class="view-toggle__btn is-active" id="recent-filter-all" role="tab"
+                aria-selected="true" aria-controls="recent-list">All</button>
+        <button type="button" class="view-toggle__btn" id="recent-filter-mine" role="tab"
+                aria-selected="false" aria-controls="recent-list">Mine</button>
+      </div>
+    </div>
+    <div class="recent-updates__list" id="recent-list"></div>
+    <div class="recent-updates__loading" id="recent-loading">
+      <span>Loading...</span>
+    </div>
+    <div class="recent-updates__empty" id="recent-empty" hidden>
+      <span>No approved submissions yet.</span>
+    </div>
+    <!-- 未登录态。结构照 submit / profile / my-submissions 三页共用的 #login-gate，只是
+         去掉那边的 "Login Required" 大标题、内边距收窄，免得在首页区块里显得臃肿。 -->
+    <div class="recent-updates__gate" id="recent-gate" hidden>
+      <p>Please log in with Discord to see your own submissions.</p>
+      <a href="/api/auth?action=login" class="form-submit">Login with Discord</a>
+    </div>
+    <!-- 鼓励语。两种情况共用一条：0 条已批准、以及只提交过 1 个国家且 ≤3 条。
+         文案与链接文字由 JS 写入（两处都要，所以不写死在标记里）。 -->
+    <div class="recent-updates__note" id="recent-note" hidden>
+      <span id="recent-note-text"></span> <a href="/submit" id="recent-note-link"></a>
+    </div>
+  </section>
+
+  <section class="recent-updates" id="site-updates" hidden>
+    <h2 class="recent-updates__title">Site Updates</h2>
+    <div class="recent-updates__list" id="updates-list"></div>
+    <div class="recent-updates__loading" id="updates-loading">
+      <span>Loading...</span>
+    </div>
+    <div class="recent-updates__empty" id="updates-empty" hidden>
+      <span>No updates yet.</span>
+    </div>
+  </section>
+
+  <footer class="footer" id="site-footer" hidden>
+    <p><a class="footer-icon footer-icon--discord" href="https://discord.gg/j2BCMV4aYD" target="_blank" rel="noopener" aria-label="Discord"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="footer-icon__svg"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg></a> &middot; <a class="footer-icon footer-icon--bilibili" href="https://space.bilibili.com/1641506378" target="_blank" rel="noopener" aria-label="bilibili"><svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="footer-icon__svg"><rect x="2" y="4" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="8" cy="2.5" r="1.2" fill="currentColor"/><circle cx="16" cy="2.5" r="1.2" fill="currentColor"/><polygon points="10,9 10,14 15,11.5" fill="currentColor"/></svg></a> &middot; Made by <a href="https://www.geoguessr.com/user/64e6ba36551e359321874de7" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Luoyang</a> &middot; &copy; 2026 GeoGuide &middot; Guides licensed under <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">CC BY-NC-SA 4.0</a></p>
+    <p class="footer__attribution">World map: <a href="https://www.npmjs.com/package/@svg-maps/world" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">@svg-maps/world</a> (CC BY 4.0) · China boundary: <a href="https://datav.aliyun.com/portal/school/atlas/area_selector" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">DataV.GeoAtlas</a> · Twemoji: <a href="https://github.com/twitter/twemoji" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">twitter/twemoji</a> (CC BY 4.0) · Source icons: <a href="https://www.plonkit.net" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">Plonk It</a> · <a href="https://rmrg.me" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline;">RMRG</a> (CC BY-NC-SA 4.0)</p>
+  </footer>
+
+  <script src="js/auth.js?v=12"></script>
+  <script src="js/utils.js?v=28"></script>
+  <script src="js/world-map.js?v=19"></script>
+  <script>
+  /* ============================================================
+     首页 "Most Contributed" 贡献者星图
+     改编自 docs/canvas.md / docs/canvas.html（深色 #0f172a 底），按本站的纸张色系
+     重做成浅色：深色的"洞"、"不可见的白环"、"彩色光晕"全部替换掉，
+     只留中性单色 chrome，颜色交给头像本身。
+
+     为什么内联在这里而不是新开 public/js/constellation.js：首页的 Batch 2 渲染代码
+     已经内联，且按下标读取结果数组。拆成独立文件就得把这个数据跨脚本边界传出去，
+     收益为零，还要多一处 ?v= 缓存版本号。卡片轮播同样是内联的。
+
+     为什么用画布而不是 SVG：连线两端每一帧都在各自漂移，SVG 一样要每帧
+     setAttribute，逃不掉 rAF，还丢掉 createLinearGradient 一次描边的好处。
+     ============================================================ */
+  (function() {
+    'use strict';
+
+    var TAU = Math.PI * 2;
+    var GOLDEN_ANGLE = 2.399963229728653;
+    // 与 --font-body 一致。画布 font 串里带 var() 不可靠，这里写死同一套字体栈。
+    var FONT_STACK = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+    /* 所有可调数字集中在这里 —— 这里是**唯一**的调参处。
+       滑杆面板是刻意移除的，不是丢了：参数已经锁定为
+       contributors=20、speed=0.3、size=1.0、连线 150px（桌面 860px 画布）。
+       要调就改这里的数字，然后重新量一遍节点间隙再下结论 —— 20 个节点在 860×500 上
+       本来就挤（最紧的一对只有 ~2px 边缘余量），动任何一个都会改变重叠情况。
+       不要因为看不到滑杆就把它们加回来。 */
+    var CONFIG = {
+      // 锁定 20 是出货值。窄屏上限仍是 6，与 20 无关 —— 它是**几何**约束，不是滑杆的
+      // 遗留：288px 宽的画布塞不下 20 个节点，n=6 在这里实测有 +38.09px 的间隙余量。
+      contributors: { min: 6, max: 20, maxNarrow: 6, narrowPx: 500 },
+      speed: 0.3,        // 漂移速度倍率。basePeriodSec / speed = 一个周期（默认 20s）
+      size: 1.0,         // 尺寸倍率（已锁定）。与 sizeBase 一起在 clamp **之后**乘进半径
+      // 以 860px 桌面画布为基准换算成比例。存比例而不是绝对 px 是承重的（prd R4）：
+      // 手机上照样用 150px 的话所有节点会连成一团。150/860 在桌面正好 150px，
+      // 288px 画布上自然缩到 ~50px。不要"简化"成固定像素值。
+      linkRatio: 150 / 860,
+      // 几何基线倍率：滑杆时代用户把"整体调小"定成了新基线 —— 0.7 烘进几何。
+      // 滑杆没了，但这个 0.7 仍是实际生效的乘数，删掉会让节点整体变大 43%。
+      sizeBase: 0.7,
+
+      basePeriodSec: 6,   // speed=1 时的漂移周期；默认 0.3 → 约 20s（参考实现约 2.1s，那是"明显在动"）
+      linkAlpha: 0.5,     // 参考值是 0.35，那是为近黑底调的；奶油色纸上几乎看不见
+      linkWidth: { base: 1.5, hover: 2.2 },   // 原先是写死的 1.2 / 1.8，用户嫌线太细
+      // 参考实现的 minRadius=20 是**加在每个节点上的常数**，它才是"大小分不出来"的根因：
+      // count 5→20 是 4 倍，开方后变量项差 2 倍，但两边都加 20 后只剩 1.26 倍，肉眼无感。
+      // 把常数压小、让开方项主导，才能让多提交的真的显大、少提交的真的更小。
+      // 平方根刻度保留 —— 面积正比于提交数才是诚实的编码，改成线性会把第一名夸大成平方级。
+      minRadius: 5,
+      radiusFactor: 5.6,
+      radiusFloor: 9,
+      radiusCeil: 42,
+      // 椭圆倍率：把黄金角螺旋压扁，贴合 860×500 的宽扁舞台。这对数字决定节点铺开
+      // 的范围 —— 调大才能把现在几乎贴住的那一对分开（prd R1）。
+      // 实测（20 节点全顶 radiusCeil=29.4 的合成夹具、整周期 1261 帧采样、
+      // 1280×900 / 画布 860×500、size 1.0）：
+      //   0.78/0.72（旧值）→ 最小边缘间隙 +2.07px，绑定对是 index 1 与 6；
+      //   0.95/0.75        → +5.96px、0 clamp；
+      //   0.92/0.80（现值）→ +10.03px、1 个 yClamped（index 19）。
+      // 混合半径夹具 18.14 → 26.87px、窄屏 368×500 / n=6 无 clamp。
+      // 绑定对主要靠 **y** 方向分开，所以 spreadY 才是有效杠杆（0.72→0.76 单独就能把
+      // 天花板夹具从 +2.07 抬到 +5.56）；x 方向余量更大，但单独拉到 0.92 只多 +1.1px。
+      // ⚠️ 本段（含 +5.56 / +1.1px / 下面那些阈值）全部来自 2026-09-17 一次性的扫参
+      // 探针，**该探针按规矩已删除，除测试套件里那几条之外都不可复现**。要改这对数字
+      // 就重新测，别引用这里的旧值当依据。
+      //
+      // **关于 clamp：最初定的规矩是"被 clamp 的节点会贴边堆积、必须为 0"，实测推翻了它。**
+      // 0.92/0.80 下只有一个节点被 clamp，而且永远是 index 19 —— 螺旋最外圈、最靠下的
+      // 那个锚点被抬到底部预留线上，是一次孤立的上钉，不是堆积。更关键的是：全局最小
+      // 间隙从来不在它身上（binding 对始终是 1/6）；混合半径夹具同样只 clamp 它这一个
+      // （测试 A36），窄屏夹具一个都没有（C3）。注意混合夹具在 botPad 补上 ampY **之前**
+      // 是 0 个 —— 底部预留变大后它也开始贴边，所以"混合夹具不 clamp"是修复前的旧结论。
+      // 所以"至多 1 个孤立 clamp"是有实测背书的取舍，不是放水。
+      // 再往上（spreadY ≥ 0.82）没有量过，可能出现第二个被 clamp 的节点 —— 没量过就不去。
+      //
+      // 漂移是第二根杠杆，代价写在这里以免被反复试探：出货值 0.92/0.80 下测试**直接读到**
+      // 静态 +19.05px → 整周期 +10.04px，即漂移吃掉约 9px。振幅减半能拿回多少**从未测量**
+      // —— 任何"约 +3.6px"的说法都是外推，别引用。当前选择是保动画：宁可要一个看不见的上钉。
+      spreadX: 0.92,
+      spreadY: 0.80,
+      hoverPad: 15,       // 命中区比圆盘略大
+      textGap: 7,         // 名字（圆盘上方）/ 国旗行（圆盘下方）距圆盘边缘的间距
+      // 名字截断的绝对上限：所有节点共用"本轮最大半径 × 4.5"（见 buildNodes）。
+      // 用户要求名字显示得更多（2026-09-18，从 × 3.0 抬上来）：本布局下最大
+      // r=29.4 → 132.3px（原 88.2px，约 14 个字符 → 21 个）。仍然先于 nameMaxW
+      // 命中，所以 nameMaxW 依旧是安全网而不是生效约束 —— 防的是将来半径上限被调大。
+      // 名字框变宽会更容易压到邻居，配套的是 stage 同时变宽变高（见 style.css）。
+      nameMaxW: 240,
+      // 国旗行：固定尺寸，**不随圆盘缩放**（prd R4）。三个并排 43px，
+      // 与 4–8 档（圆盘直径 23–29px）基本齐平；提交数 9–40 的节点旗带比圆盘宽，
+      // 这是刻意的取舍（design 取舍表）。
+      flag: { w: 13, h: 10, gap: 2, gapToCount: 3, capSmall: 3, capMid: 8 }
+    };
+
+    var canvas = null, ctx = null, stage = null, mirror = null;
+
+    var allContributors = [];   // 完整名单，保持 API 的 cnt DESC 顺序
+    var nodes = [];
+    var imgCache = null;        // Map<user_id, {img, state}> —— 见 entryFor()
+    var flagCache = null;       // Map<country_id, {img, state, code}> —— 见 flagSlotFor()
+    var colors = null;
+
+    var width = 0, height = 0, dpr = 1, measured = false;
+    var nMin = CONFIG.contributors.min, nMax = CONFIG.contributors.max;
+    var state = { n: CONFIG.contributors.max, speed: CONFIG.speed, size: CONFIG.size,
+                  linkRatio: CONFIG.linkRatio };
+    var hovered = null;
+    var reduced = false, visible = false, running = false, rafId = 0, frameCount = 0;
+    var t0 = (window.performance && performance.now) ? performance.now() : 0;
+    var mq = null, io = null, ro = null;
+
+    // ---- 小工具 ----
+
+    function clamp(v, lo, hi) {
+      if (hi < lo) hi = lo;
+      return v < lo ? lo : (v > hi ? hi : v);
+    }
+
+    function isNarrow() {
+      return window.innerWidth < CONFIG.contributors.narrowPx;
+    }
+
+    // 颜色统一从 :root 令牌读，不在这里另抄一份色值 —— 令牌改了星图跟着改。
+    function readColors() {
+      var cs = getComputedStyle(document.documentElement);
+      function v(name, fb) {
+        var val = cs.getPropertyValue(name);
+        return (val && val.trim()) || fb;
+      }
+      return {
+        paper: v('--paper-light', '#fdfaf3'),
+        border: v('--border-warm', '#d9d0bc'),
+        soil: v('--soil-dark', '#2d5a3d'),
+        terracotta: v('--earth-terracotta', '#c4762b'),
+        ink: v('--ink-charcoal', '#2c2416'),
+        faded: v('--ink-faded', '#7a7265')
+      };
+    }
+
+    // ---- 数据：头像只创建一次，按 user_id 缓存 ----
+
+    function entryFor(c) {
+      var e = imgCache.get(c.user_id);
+      if (e) return e;   // 重建节点集时不得重新请求/重新解码任何一张头像
+      e = { img: new Image(), state: 'loading' };
+      // R9：参考实现只挂了 onload。这里两条失败路径都是真实存在的：
+      //   1. Discord CDN 404（用户换了或删了头像）；
+      //   2. avatar_url === ''（api/submissions.js:48）—— 直接写 img.src = ''
+      //      会解析成当前页面 URL 然后报错。
+      // 两者都退化成"首字母圆盘"，绝不留一个空洞。
+      e.img.onload = function() { e.state = 'ready'; };
+      e.img.onerror = function() { e.state = 'failed'; };
+      if (c.avatar_url) {
+        e.img.src = c.avatar_url;
+      } else {
+        e.state = 'failed';
+      }
+      imgCache.set(c.user_id, e);
+      return e;
+    }
+
+    function firstLetter(name) {
+      var s = (name || '').replace(/^\s+/, '');
+      return s ? s.charAt(0).toUpperCase() : '?';
+    }
+
+    // ---- 国旗 ----
+
+    // 面数上限由提交数决定（prd R4 的用户规则）：
+    //   ≤3 → 1 面，≤8 → 2 面，>8 → 3 面。再与"该用户实际提交过的去重国家数"取小。
+    function flagCapFor(count) {
+      if (count <= CONFIG.flag.capSmall) return 1;
+      if (count <= CONFIG.flag.capMid) return 2;
+      return 3;
+    }
+
+    // 该用户**已决定**要画的国家 id（已截断到上限，且查得到旗码）。
+    // 纯函数：不碰图片缓存 —— buildMirror 在没有画布尺寸时也要用它。
+    function countryIdsFor(c) {
+      var map = window._countryMap || {};
+      var cap = flagCapFor(c.count || 0);
+      var src = c.countries || [];
+      var out = [];
+      for (var k = 0; k < src.length && out.length < cap; k++) {
+        var info = map[src[k]];
+        // 查不到国家、或 countries.flag 为空 → 丢弃这一面，不报错
+        //（/api/countries 非 admin 只返回 active=1，历史国家查不到是预期）。
+        if (info && info.flag) out.push(src[k]);
+      }
+      return out;
+    }
+
+    // 与 entryFor() 同一套路：按国家去重，重建节点集时不重复请求。
+    // 用 flagcdn 图片而不是 emoji —— Windows 上国旗 emoji 会退化成 "ZA" 字母。
+    // w40（不是 w20）：画面只画 13px 宽，但 DPR=2 时需要 26 个物理像素，
+    // w20 会发虚。全站现有的是 w80/w160，同源，CSP 已放行 flagcdn.com。
+    function flagSlotFor(cid) {
+      var e = flagCache.get(cid);
+      if (e) return e;
+      var info = (window._countryMap || {})[cid];
+      var code = info && info.flag ? info.flag : '';
+      e = { img: new Image(), state: 'loading', code: code };
+      // 任一失败都不留破图、不留空洞，少画那一面（与头像 'failed' 同一纪律）。
+      e.img.onload = function() { e.state = 'ready'; };
+      e.img.onerror = function() { e.state = 'failed'; };
+      if (code) e.img.src = 'https://flagcdn.com/w40/' + code + '.png';
+      else e.state = 'failed';
+      flagCache.set(cid, e);
+      return e;
+    }
+
+    // ---- 布局：锚点必须是 (index, n) 的纯函数 ----
+
+    // ---- 谁坐哪个槽位：把提交数排名打散到整个半径区间 ----
+    // 名单是 `ORDER BY cnt DESC`，所以**下标就是提交数排名**：下标 0 是第一名。
+    // 如果让螺旋槽位直接跟着下标走，最大的那批人就挤在同一圈 —— 正序全在圆心
+    // （"紧贴出现"的来源），反序全在最外圈（"边边都是大节点、中间空洞"的来源）。
+    // 两种都上线过，都被用户看出来了。
+    //
+    // 所以打散的是**指派**，不是位置：第 i 个贡献者沿黄金比步长取一个槽位，撞车就
+    // 顺延到最近的空位（黄金比步长在 n 小时会撞，n=6 就有两处）。黄金比是低差异
+    // 序列，所以**任何一个前缀都摊得开**：提交数最多的前 5 名稳定覆盖约 88% 的
+    // 半径区间，而不是扎堆在某一圈。加半个步长的相位偏移，免得第一名永远钉在正圆心
+    // （不加时 n=2..20 里 19/19 次都落在圆心）。
+    //
+    // **没有 Math.random()**：步长和相位都是常数，同一个 n 永远得到同一个排列，
+    // 所以 resize 不会重排。散开之后万一有两个真的贴住了，交给 relaxNodes 推开。
+    //
+    // 返回 order[i] = 名单里第 i 个贡献者应该坐的槽位。
+    var PHI = 0.6180339887498949;
+    function rankOrder(n) {
+      var order = new Array(n), used = new Array(n);
+      for (var i = 0; i < n; i++) {
+        var want = Math.floor((((i * PHI) + 0.5) % 1) * n);
+        for (var d = 0; d < n && used[want]; d++) want = (want + 1) % n;
+        used[want] = true;
+        order[i] = want;
+      }
+      return order;
+    }
+
+    // 黄金角螺旋：对任意 N 都均匀铺开（3 个和 20 个两端都不塌）。
+    //
+    // ⚠️ **参数是"槽位"，不是"名单下标"。** 名单按提交数降序，而下标同时被拿去做
+    // 位置，两者绑在一起就是前面那个两难。现在由 rankOrder 把贡献者指派到槽位，
+    // 这个函数**只认槽位**，所以螺旋本身始终是纯净的、低差异的。
+    // 曾把打散做在这里（改 rho 的值而不是改谁坐哪），结果破坏了低差异性质、
+    // 节点真的挤成一团，A30/B5 两个名字框重叠断言当场变红。
+    //
+    // 第二参数曾经叫 `count`，但调用处传的是 list.length，与这个人的提交数无关。
+    // 改名成 `n`：位置与提交数的**数值**无关，只与"谁被指派到哪个槽位"有关。
+    //
+    // 第三参数 rhoMax 是**外圈半径的上限**，由 buildNodes 按本轮最大节点的半径与
+    // 上下预留算出来 —— 最大节点的边界余量 (r + 6) 也最大，固定用 0.5 会让它顶出
+    // 边界、被 clamp 成贴边。桌面 1100px 上算出来仍是 0.5，等于空操作，只有窄屏收紧。
+    function anchorFor(slot, n, rhoMax) {
+      var theta = slot * GOLDEN_ANGLE;
+      var rho = rhoMax * Math.sqrt((slot + 0.5) / Math.max(1, n));
+      return {
+        xR: 0.5 + rho * Math.cos(theta) * CONFIG.spreadX,
+        yR: 0.5 + rho * Math.sin(theta) * CONFIG.spreadY
+      };
+    }
+
+    // 参考实现是按 900×620 标定的；按画布宽度缩放后才经得起窄屏。
+    // 平方根刻度保留 —— 它让面积正比于提交数，这才是诚实的编码，
+    // 线性半径会把第一名夸大成平方级。
+    function sizeFactorFor(w) {
+      return clamp(w / 860, 0.55, 1);
+    }
+
+    // 形状沿用 docs/canvas.html 的 Math.max(floor, r*k)，但要说实话：**比值项一次都没
+    // 生效过**。本布局的半径上界是 radiusCeil × sizeBase × size = 42 × 0.7 = 29.4，
+    // 于是 r*0.32 = 9.4 < 11、r*0.26 = 7.6 < 12 —— 两个函数实际都是常数（名字 11px、
+    // 提交数 12px）。保留形状是为了将来半径上限被调大时能自动跟上，不是因为现在在用。
+    // 上下预留用同一套函数算，预留才不会和实际画出来的位置各自漂移。
+    // 提交数下限从 10 提到 12（prd R3：用户要"看得更清楚"）。
+    function nameSizeFor(r) { return Math.max(11, Math.round(r * 0.32)); }
+    function countSizeFor(r) { return Math.max(12, Math.round(r * 0.26)); }
+
+    function radiusFor(count, sf) {
+      // 倍率必须夹在 clamp **之后**乘。乘在前面时 radiusCeil 会把放大吞掉 ——
+      // 高提交数的节点本来就顶到上限，放大在右半程会被整个吃掉。
+      // sizeBase 与 state.size 同级、都在 clamp 之后：floor/ceil 留在缩放前的单位里，
+      // 于是两个倍率均匀缩放整个半径区间（见 CONFIG.sizeBase 的说明）。
+      return clamp((CONFIG.minRadius + Math.sqrt(Math.max(0, count)) * CONFIG.radiusFactor) * sf,
+                   CONFIG.radiusFloor, CONFIG.radiusCeil) * CONFIG.sizeBase * state.size;
+    }
+
+    // ---- 确定性排开（"紧贴就离远"） ----
+    // 锚点只按下标摆，提交数唯一的作用是通过半径决定**标签块伸出去多远**：
+    // 名字在圆盘上方 (r + textGap + nameSize)、国旗行 + 提交数在下方
+    // (r + textGap + flagH + gapToCount + countSize)，所以标签块总高 = 2r + 约 50px。
+    // 提交数越大 → 半径越大 → 标签块越大 → 越容易压到邻居身上。螺旋本身不知道这件事，
+    // 所以这里在锚点算完之后，按**实际要画出来的框**把重叠的每一对推开。
+    //
+    // 这是"排开"，不是"随机抖动"：没有 Math.random()、不读时钟，遍历顺序固定，
+    // 所以位置仍然是 (名单, 画布尺寸) 的纯函数 —— resize 重算一遍得到同一个结果。
+    var RELAX = { iterations: 14, pad: 6 };
+
+    // 一个节点实际占的矩形：横向取名字/国旗行/提交数里最宽的那个，纵向从名字顶端
+    // 到提交数底端。四个角是空的（名字只在圆盘上方、国旗只在下方），所以这是个
+    // **保守**的框 —— 宁可多推一点，也不要让两块文字压在一起。
+    function labelBox(n) {
+      var halfW = Math.max(n.nameW, n.flagTotalW, n.countW) / 2;
+      return {
+        l: n.baseX - halfW,
+        r: n.baseX + halfW,
+        t: n.baseY - n.r - CONFIG.textGap - n.nameSize,
+        b: n.baseY + n.r + CONFIG.textGap + CONFIG.flag.h + CONFIG.flag.gapToCount + n.countSize
+      };
+    }
+
+    function relaxNodes(list) {
+      if (list.length < 2) return;
+      for (var it = 0; it < RELAX.iterations; it++) {
+        var moved = false;
+        for (var i = 0; i < list.length; i++) {
+          for (var j = i + 1; j < list.length; j++) {
+            var A = list[i], B = list[j];
+            var a = labelBox(A), b = labelBox(B);
+            // 两轴都重叠才算撞上；越过一轴就已经分开了
+            var ox = Math.min(a.r, b.r) - Math.max(a.l, b.l) + RELAX.pad;
+            var oy = Math.min(a.b, b.b) - Math.max(a.t, b.t) + RELAX.pad;
+            if (ox <= 0 || oy <= 0) continue;
+            // 挑需要位移小的那根轴分开 —— 纵向叠住的那一对（下一个人的名字压着
+            // 上一个人的国旗/提交数）横向重叠很大、纵向只差一点，所以会走 y 分支，
+            // 这正是要的方向；反之并排的一对走 x 分支。尽量少动螺旋的大形状。
+            var A2, B2;
+            if (ox <= oy) {
+              A2 = (A.baseX <= B.baseX ? -1 : 1) * ox / 2;
+              A.baseX += A2; B.baseX -= A2;
+            } else {
+              A2 = (A.baseY <= B.baseY ? -1 : 1) * oy / 2;
+              A.baseY += A2; B.baseY -= A2;
+            }
+            moved = true;
+          }
+        }
+        // 每轮把节点夹回画布内。上下预留逐节点不同（半径不同），必须用各自的，
+        // 否则大节点的标签会被裁掉。夹回来可能又压上，所以要多迭代几轮。
+        for (var k = 0; k < list.length; k++) {
+          var n = list[k];
+          n.baseX = clamp(n.baseX, n.r + 6, width - n.r - 6);
+          n.baseY = clamp(n.baseY, n.topPad, height - n.botPad);
+        }
+        if (!moved) break;
+      }
+      for (var m = 0; m < list.length; m++) { list[m].cx = list[m].baseX; list[m].cy = list[m].baseY; }
+    }
+
+    function buildNodes() {
+      if (width <= 0 || height <= 0) { nodes = []; return; }
+      var list = allContributors.slice(0, state.n);
+      var sf = sizeFactorFor(width);
+      var out = [];
+      // 名字宽度不再随各自半径变（小圆只够 ~4 个字符就省略号），改为**全体共用**
+      // 本轮最大节点的额度（prd R2）。仍与 nameMaxW 取小；截断算法不变。
+      var maxR = 0;
+      for (var m = 0; m < list.length; m++) maxR = Math.max(maxR, radiusFor(list[m].count, sf));
+      var nameMaxAll = Math.min(maxR * 4.5, CONFIG.nameMaxW);
+      // 预扫一遍，只为拿到本轮最大的上下预留 —— 螺旋的外圈半径要用它收紧，好让
+      // 被散到最外圈的那个大节点不顶到画布边界上被 clamp（大节点在圆心时不会，
+      // 散开之后就会）。
+      var maxTopPad = 0, maxBotPad = 0;
+      for (var p = 0; p < list.length; p++) {
+        var rp = radiusFor(list[p].count, sf);
+        var ampYp = (3.5 + (p % 2) * 1.8) * sf;
+        maxTopPad = Math.max(maxTopPad, rp + CONFIG.textGap + nameSizeFor(rp) + ampYp);
+        maxBotPad = Math.max(maxBotPad, rp + CONFIG.textGap + CONFIG.flag.h
+                                     + CONFIG.flag.gapToCount + countSizeFor(rp) + ampYp);
+      }
+      // 三个上限取最小：横向 (r + 6)、上方 topPad、下方 botPad。再夹进 [0, 0.5] ——
+      // rho 的语义是"到中心的归一化距离"，超过 0.5 就没有意义了。
+      var rhoMax = Math.min(
+        (0.5 - (maxR + 6) / width) / CONFIG.spreadX,
+        (0.5 - maxTopPad / height) / CONFIG.spreadY,
+        (0.5 - maxBotPad / height) / CONFIG.spreadY
+      );
+      rhoMax = Math.max(0, Math.min(0.5, rhoMax));
+      // 半径上的排名打散 —— 理由见 rankOrder。每个 build 只算一次。
+      var order = rankOrder(list.length);
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        // slot = 这个贡献者坐哪个螺旋槽位。位置与漂移相位都跟着**槽位**走
+        // （相邻槽位相位不同，才不会同时撞在一起）；内容仍旧取自 list[i]。
+        var slot = order[i];
+        var a = anchorFor(slot, list.length, rhoMax);
+        var r = radiusFor(c.count, sf);
+        var ampX = (3 + (slot % 3) * 1.5) * sf;
+        var ampY = (3.5 + (slot % 2) * 1.8) * sf;
+        var nameSize = nameSizeFor(r);
+        var countSize = countSizeFor(r);
+        // 国旗行插在圆盘与提交数之间，固定高度（1 面与 3 面同高），所以底部多出
+        // 一整行。botPad 必须与 drawNode 实际画的位置**同源**：只改一处会最下面
+        // 一排的提交数被画布裁掉（design §6.2）。
+        var flagIds = countryIdsFor(c);
+        // 触发加载（按国家去重，重建节点集不会重复请求）。失败的槽位留在缓存里
+        // 标成 'failed'，drawNode 跳过它 —— 不留破图也不重排。
+        for (var fi = 0; fi < flagIds.length; fi++) flagSlotFor(flagIds[fi]);
+        var flagRowH = CONFIG.flag.h + CONFIG.flag.gapToCount;
+        var flagTotalW = flagIds.length
+          ? flagIds.length * CONFIG.flag.w + (flagIds.length - 1) * CONFIG.flag.gap : 0;
+        // 标签块的实际宽度 = 名字 / 国旗行 / 提交数 三者中最宽的那个。名字必须量，
+        // 而且 truncate 依赖 ctx 当前的 font，所以先设好字体再量。drawNode 之后会按
+        // 同样的方式再算一次（值相同）—— 这里只为"排开"提供真实尺寸，不是绘制。
+        var nameW = 0, countW = 0;
+        if (ctx) {
+          ctx.font = '600 ' + nameSize + 'px ' + FONT_STACK;
+          nameW = ctx.measureText(truncate(c.username || 'Unknown', nameMaxAll)).width;
+          ctx.font = '400 ' + countSize + 'px ' + FONT_STACK;
+          countW = ctx.measureText(String(c.count || 0)).width;
+        }
+        // 名字画在圆盘**上方**、国旗+提交数留在下方，所以上下预留必须分开算：
+        //   上 = 半径 + 间距 + 名字行高
+        //   下 = 半径 + 间距 + 国旗行高 + 提交数行高
+        // 只把原来的 textReserve 放大再套两端的话，底部节点会被无谓地往上拉。
+        // 上边还要加上 ampY：节点最多在自己的锚点上方漂 ampY，不预进去的话
+        // 漂到波峰的那几帧名字会被画布上缘裁掉（用户明确要检查这一点）。
+        // **下面那一份同样要加 ampY**：漂移是 cy = baseY + cos(...) * ampY，关于锚点
+        // 对称，底部一样会向下漂 ampY —— 只给顶部预留是错的。实测后果：国旗行把
+        // botPad 抬高 15px 后，index 19 被压到底部边界上，静态 y=499.28（< 500，所以
+        // 单点采样看着正常），每个向下漂移的相位都把提交数裁到画布外：全顶格夹具
+        // −5.29px、混合夹具 −1.65px。上下两端必须用同一个 ampY。
+        var topPad = r + CONFIG.textGap + nameSize + ampY;
+        var botPad = r + CONFIG.textGap + flagRowH + countSize + ampY;
+        // 比例存起来（设计 §3 的节点模型），像素位置由它派生 —— resize 只是缩放，
+        // 不改变相对排布。这里再夹一次边界：最外圈的圆盘和它上下的文字必须留在画布内。
+        var rawX = a.xR * width, rawY = a.yR * height;
+        var baseX = clamp(rawX, r + 6, width - r - 6);
+        var baseY = clamp(rawY, topPad, height - botPad);
+        out.push({
+          user_id: c.user_id,
+          username: c.username || 'Unknown',
+          count: c.count || 0,
+          entry: entryFor(c),
+          xR: a.xR, yR: a.yR, r: r,
+          baseX: baseX, baseY: baseY,
+          cx: baseX, cy: baseY,
+          // 漂移参数同样由下标决定，不含随机
+          ampX: ampX,
+          ampY: ampY,
+          phaseX: slot * 1.2,
+          phaseY: slot * 1.7 + 0.8,
+          // 国旗：只记"已决定的国家列表"，槽位宽度由它预留。若由"已加载成功的图片"
+          // 决定，图片陆续到达时整行会左右跳动（design §6.1）。
+          flagIds: flagIds,
+          // 供 drawNode 回填 / 探针读取的文字与几何
+          nameText: '', nameW: nameW, nameSize: nameSize, nameMax: nameMaxAll,
+          countSize: countSize, countW: countW, flagTotalW: flagTotalW,
+          // 逐节点的上下预留：排开时把节点夹回画布要用各自的（半径不同，预留不同）。
+          topPad: topPad, botPad: botPad,
+          // 被 clamp 改过的节点会贴在画布边界上堆起来 —— 间距结论只在两种都为 false
+          // 时可信（design §3.3）。探针要能读到。
+          xClamped: Math.abs(baseX - rawX) > 0.001,
+          yClamped: Math.abs(baseY - rawY) > 0.001
+        });
+      }
+      // 排开放在锚点之后、赋值之前：它改的是 baseX/baseY（漂移加在其上），
+      // cx/cy 同步更新，所以 drawFrame 与探针拿到的都是排开后的位置。
+      relaxNodes(out);
+      nodes = out;
+      hovered = null;
+    }
+
+    // R7：屏幕阅读器镜像。每次 Contributors 变化都重建，保证镜像描述的集合
+    // 与画布上显示的完全一致，不是一份会过期的快照。
+    function buildMirror() {
+      var list = allContributors.slice(0, state.n);
+      var frag = document.createDocumentFragment();
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        var li = document.createElement('li');
+        var cnt = c.count || 0;
+        var text = (c.username || 'Unknown') + ' — ' + cnt +
+                   (cnt === 1 ? ' submission' : ' submissions');
+        // 画布上的国旗对读屏完全不可见（spec §4），"贡献在哪"这条信息必须在镜像里
+        // 也有一份，否则只有看得见的人拿得到它。国家名取 _countryMap（首页对
+        // HK/MO/TW 做过显示名覆盖），查不到的跳过。
+        var map = window._countryMap || {};
+        var names = [];
+        var cids = countryIdsFor(c);
+        for (var k = 0; k < cids.length; k++) {
+          var info = map[cids[k]];
+          if (info && info.name) names.push(info.name);
+        }
+        if (names.length) text += ' (' + names.join(', ') + ')';
+        li.textContent = text;
+        frag.appendChild(li);
+      }
+      mirror.textContent = '';
+      mirror.appendChild(frag);
+    }
+
+    // ---- 画布尺寸 ----
+
+    function measure() {
+      if (!stage) return false;
+      var rect = stage.getBoundingClientRect();
+      width = Math.round(rect.width);
+      height = Math.round(rect.height);
+      if (width <= 0 || height <= 0) { measured = false; return false; }
+      dpr = window.devicePixelRatio || 1;
+      // 不要"修"参考实现的 resize()：给 canvas.width 赋值会重置上下文变换矩阵，
+      // 所以紧接着的 scale(dpr,dpr) 是正确的、不是重复缩放。setTransform 只是更直白。
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      measured = true;
+      return true;
+    }
+
+    // ---- 绘制 ----
+
+    function linkPx() {
+      // 比例已锁定为 150/860，不再有滑杆范围要夹。乘以当前画布宽即可 ——
+      // 桌面 860px 上正好 150px，288px 画布上缩到 ~50px。
+      return Math.round(state.linkRatio * width);
+    }
+
+    function truncate(text, maxW) {
+      // 画布没有 text-overflow，超宽的用户名会压到邻居身上，只能自己量。
+      if (ctx.measureText(text).width <= maxW) return text;
+      var lo = 1, hi = text.length;
+      while (lo < hi) {
+        var mid = Math.ceil((lo + hi) / 2);
+        if (ctx.measureText(text.slice(0, mid) + '…').width <= maxW) lo = mid;
+        else hi = mid - 1;
+      }
+      return text.slice(0, lo) + '…';
+    }
+
+    function drawFrame() {
+      if (!measured || !nodes.length) return;
+      frameCount++;
+      // R11：相位取自 performance.now()，不是帧计数器。参考实现的 time += 0.05
+      // 在 120Hz 屏上漂移速度是 60Hz 的两倍。
+      // 降低动态效果时把 t 钉在 0：静态一帧，多次重绘也不会跳位置。
+      var t = reduced ? 0 : ((window.performance && performance.now ? performance.now() : Date.now()) - t0) / 1000;
+      var w = state.speed / CONFIG.basePeriodSec;
+
+      ctx.clearRect(0, 0, width, height);
+
+      var i, n;
+      for (i = 0; i < nodes.length; i++) {
+        n = nodes[i];
+        n.cx = n.baseX + Math.sin(t * TAU * w + n.phaseX) * n.ampX;
+        n.cy = n.baseY + Math.cos(t * TAU * w + n.phaseY) * n.ampY;
+      }
+
+      drawLinks();
+      for (i = 0; i < nodes.length; i++) drawNode(nodes[i]);
+    }
+
+    function drawLinks() {
+      var maxD = linkPx();
+      for (var i = 0; i < nodes.length; i++) {
+        var a = nodes[i];
+        for (var j = i + 1; j < nodes.length; j++) {
+          var b = nodes[j];
+          var dx = b.cx - a.cx, dy = b.cy - a.cy;
+          var d = Math.sqrt(dx * dx + dy * dy);
+          if (d >= maxD) continue;
+          var alpha = (1 - d / maxD) * CONFIG.linkAlpha;
+          var hot = (hovered === a || hovered === b);
+          // 每对、每帧一个 gradient。节点 ≤ 10 时每帧 ≤ 45 个对象，可以接受；
+          // 真要做性能优化，这里是第一处（缓存成对渐变，或退化成平均色的平涂）。
+          var grad = ctx.createLinearGradient(a.cx, a.cy, b.cx, b.cy);
+          grad.addColorStop(0, colors.soil);
+          grad.addColorStop(1, colors.terracotta);
+          ctx.save();
+          ctx.beginPath();
+          ctx.moveTo(a.cx, a.cy);
+          ctx.lineTo(b.cx, b.cy);
+          ctx.strokeStyle = grad;
+          ctx.globalAlpha = hot ? Math.min(1, alpha * 2.2) : alpha;
+          // 用户嫌线太细。只加粗、不动 linkAlpha（0.5）—— 同时改两个变量就分不清是哪个起的作用。
+          ctx.lineWidth = hot ? CONFIG.linkWidth.hover : CONFIG.linkWidth.base;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
+    }
+
+    function drawNode(node) {
+      var r = node.r;
+      var hot = (hovered === node);
+
+      // 圆盘：--paper-light + 1px --border-warm。
+      // 参考实现的 #334155 深色底在奶油纸上是一个"洞"，彩色 shadowBlur 会糊成一块脏斑。
+      // 这里中性单色、无光晕 —— 颜色由头像提供。
+      ctx.beginPath();
+      ctx.arc(node.cx, node.cy, r, 0, TAU);
+      ctx.fillStyle = colors.paper;
+      ctx.fill();
+
+      if (node.entry.state === 'ready') {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(node.cx, node.cy, r - 1, 0, TAU);
+        ctx.clip();
+        // 画布污染：Discord 头像是跨域的，drawImage 会把画布标记为 tainted。
+        // 这里无害 —— 全程不调用 getImageData / toDataURL。以后若要加"下载这张图"，
+        // 第一次读像素就会抛 SecurityError，届时要给 img 加 crossorigin + CDN CORS 头。
+        ctx.drawImage(node.entry.img, node.cx - r, node.cy - r, r * 2, r * 2);
+        ctx.restore();
+      } else if (node.entry.state === 'failed') {
+        // 失败退化成首字母圆盘，永远不留空洞。
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(node.cx, node.cy, r, 0, TAU);
+        ctx.clip();
+        ctx.fillStyle = colors.soil;
+        ctx.font = '600 ' + Math.max(11, Math.round(r * 0.9)) + 'px ' + FONT_STACK;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(firstLetter(node.username), node.cx, node.cy + 1);
+        ctx.restore();
+      }
+      // state === 'loading' 时只剩空圆盘 —— 中性占位，不是空白洞。
+
+      // 环：静置 --border-warm，hover --soil-dark。
+      ctx.beginPath();
+      ctx.arc(node.cx, node.cy, r, 0, TAU);
+      ctx.strokeStyle = hot ? colors.soil : colors.border;
+      ctx.lineWidth = hot ? 2 : 1;
+      ctx.stroke();
+
+      // 名字在圆盘**上方**，国旗行 + 提交数在下，都居中、都不压在脸上。
+      // 提交数是裸数字（节点很小，标题已说明在数什么），完整说法由 .sr-only 镜像承担。
+      // 名字宽度 = 本轮最大半径 × 3.0（全体共用，prd R2），已在 buildNodes 里定死。
+      var nameSize = node.nameSize || nameSizeFor(r);
+      var countSize = node.countSize || countSizeFor(r);
+      var nameMax = node.nameMax || CONFIG.nameMaxW;
+      ctx.textAlign = 'center';
+      ctx.font = '600 ' + nameSize + 'px ' + FONT_STACK;
+      node.nameText = truncate(node.username, nameMax);
+      node.nameW = ctx.measureText(node.nameText).width;
+      node.nameSize = nameSize;
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = colors.ink;
+      ctx.fillText(node.nameText, node.cx, node.cy - r - CONFIG.textGap);
+
+      // 国旗行：圆盘下方、提交数上方，固定 13×10、整体居中。
+      // 三个并排 = 43px，比 >8 档的圆盘还宽 —— 刻意的取舍，见 CONFIG.flag 说明。
+      // 槽位宽度由已决定的 flagIds 预留，未就绪/失败的槽位跳过绘制但**不改变位置**。
+      var flagTop = node.cy + r + CONFIG.textGap;
+      var flagIds = node.flagIds || [];
+      if (flagIds.length) {
+        var FW = CONFIG.flag.w, FG = CONFIG.flag.gap, FH = CONFIG.flag.h;
+        var totalW = flagIds.length * FW + (flagIds.length - 1) * FG;
+        var startX = node.cx - totalW / 2;
+        for (var k = 0; k < flagIds.length; k++) {
+          var slot = flagCache.get(flagIds[k]);
+          if (!slot || slot.state !== 'ready') continue;   // 少画一面，位置不动
+          ctx.drawImage(slot.img, startX + k * (FW + FG), flagTop, FW, FH);
+        }
+      }
+
+      ctx.font = '400 ' + countSize + 'px ' + FONT_STACK;
+      ctx.textBaseline = 'top';
+      ctx.fillStyle = colors.faded;
+      ctx.fillText(String(node.count), node.cx, flagTop + CONFIG.flag.h + CONFIG.flag.gapToCount);
+    }
+
+    // ---- 生命周期：三个闸门 ----
+
+    function stop() {
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      running = false;
+    }
+
+    function loop() {
+      if (!running) return;
+      drawFrame();
+      rafId = requestAnimationFrame(loop);
+    }
+
+    // 静态模式（降低动态效果）下重画一张，永不排下一帧。
+    function renderNow() {
+      if (!measured) return;
+      stop();
+      drawFrame();
+    }
+
+    function maybeStart() {
+      if (!measured) return;
+      if (reduced) {
+        // R6：全站降级规则在 style.css:4826，但它是纯 CSS 的（压 animation/transition），
+        // 对 requestAnimationFrame 循环完全无效。必须在 JS 侧再闸一道：
+        // 只画一帧静态画面，之后一帧都不排。
+        renderNow();
+        return;
+      }
+      if (running || !visible) return;
+      if (document.visibilityState !== 'visible') return;
+      running = true;
+      rafId = requestAnimationFrame(loop);
+    }
+
+    function refresh() {
+      if (measured) buildNodes();
+      buildMirror();          // 画布量不到尺寸也要建名单（设计 §9 的降级路径）
+      if (reduced) renderNow();
+    }
+
+    // 主题切换后必须重取色。readColors() 本来就是从 :root 读令牌的（没在这里另抄一份色值），
+    // 但它只在 initConstellation 里调用过一次 —— 不重取的话星图会一直用旧配色。
+    // ⚠️ 两个模式的失效方式不同，只有 reduced 那条会漏：
+    //   动画模式 —— loop 每帧读一次 colors，重取即可，下一帧自动生效；
+    //   reduced（降低动态效果）—— renderNow() 画完一帧就**不再排任何帧**，
+    //   必须手动再画一帧，否则会停在旧配色上直到窗口 resize 或重新可见。
+    //   这个 bug 只在开了 prefers-reduced-motion 的机器上复现，很容易漏测。
+    document.addEventListener('theme:change', function () {
+      colors = readColors();
+      if (reduced) renderNow();
+    });
+
+    // ---- 节点数：锁定的 20 必须过一遍窄屏闸门 ----
+    // 滑杆面板没了，但这个函数要留下：窄屏（< 500px）上限 6 不是滑杆的遗留，
+    // 而是几何约束 —— 288px 宽的画布塞不下 20 个节点。原来写在滑杆的 DOM 更新里，
+    // 现在只剩计算部分。nMin/nMax 仍由 __constellation.status() 暴露给探针。
+    function syncCount() {
+      nMin = Math.min(CONFIG.contributors.min, allContributors.length);
+      var cap = isNarrow() ? CONFIG.contributors.maxNarrow : CONFIG.contributors.max;
+      nMax = Math.max(nMin, Math.min(allContributors.length, cap));
+      state.n = clamp(state.n, nMin, nMax);
+    }
+
+    // 交互只剩 hover 高亮：不改 cursor，因为节点没有可跳转的去处
+    //（没有公开的贡献者页面），指针变手会承诺一个不存在的跳转。
+    function wireHover() {
+      canvas.addEventListener('mousemove', function(e) {
+        var rect = canvas.getBoundingClientRect();
+        var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+        var found = null;
+        // 命中区也要跟着 size 缩放：写死 15px 时节点越大、命中区相对越小。
+        // sizeBase 一起带上是让"0.7× 是基线"对所有尺寸相关的量一致生效。
+        var pad = CONFIG.hoverPad * CONFIG.sizeBase * state.size;
+        for (var i = nodes.length - 1; i >= 0; i--) {
+          var n = nodes[i];
+          var dx = mx - n.cx, dy = my - n.cy;
+          if (dx * dx + dy * dy <= (n.r + pad) * (n.r + pad)) {
+            found = n;
+            break;
+          }
+        }
+        if (found !== hovered) {
+          hovered = found;
+          // 节点不可点击（没有公开的贡献者页面），所以不改 cursor —— 指针变手
+          // 会承诺一个并不存在的跳转。
+          if (reduced) renderNow();
+        }
+      });
+      canvas.addEventListener('mouseleave', function() {
+        if (hovered) { hovered = null; if (reduced) renderNow(); }
+      });
+    }
+
+    // ---- 观察者 ----
+
+    function onResize() {
+      if (!measure()) return;
+      syncCount();           // 跨过 500px 时窄屏上限会变（20 ↔ 6）
+      refresh();
+      if (!reduced) maybeStart();
+    }
+
+    function observe() {
+      if (window.IntersectionObserver) {
+        io = new IntersectionObserver(function(entries) {
+          visible = entries[entries.length - 1].isIntersecting;
+          if (visible) maybeStart(); else stop();
+        }, { threshold: 0 });
+        io.observe(stage);
+      } else {
+        visible = true;   // 没有 IO 就当可见，至少别永远静止
+      }
+
+      document.addEventListener('visibilitychange', function() {
+        if (document.visibilityState === 'visible') maybeStart(); else stop();
+      });
+
+      if (window.ResizeObserver) {
+        ro = new ResizeObserver(onResize);
+        ro.observe(stage);
+      } else {
+        window.addEventListener('resize', onResize);
+      }
+
+      mq = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+      reduced = !!(mq && mq.matches);
+      var onMq = function() {
+        reduced = !!mq.matches;
+        if (reduced) { stop(); renderNow(); } else { maybeStart(); }
+      };
+      if (mq) {
+        if (mq.addEventListener) mq.addEventListener('change', onMq);
+        else if (mq.addListener) mq.addListener(onMq);   // 老 Safari
+      }
+    }
+
+    // ---- 入口 ----
+
+    window.initConstellation = function(list) {
+      allContributors = (list || []).slice();
+      if (!allContributors.length) return;
+
+      canvas = document.getElementById('constellation-canvas');
+      stage = document.getElementById('constellation-stage');
+      mirror = document.getElementById('contributed-list');
+      if (!canvas || !stage || !mirror) return;
+      ctx = canvas.getContext ? canvas.getContext('2d') : null;
+      if (!ctx) return;
+
+      colors = readColors();
+      imgCache = new Map();
+      flagCache = new Map();
+      t0 = (window.performance && performance.now) ? performance.now() : 0;
+      frameCount = 0;
+      // 参数锁定的值全在 CONFIG 里；这里只把 n 过一遍窄屏闸门。
+      state.speed = CONFIG.speed;
+      state.size = CONFIG.size;
+      state.linkRatio = CONFIG.linkRatio;
+      state.n = CONFIG.contributors.max;
+
+      // 尺寸必须在 #most-contributed 摘掉 hidden 之后量（调用点已保证）。
+      measure();
+      syncCount();
+
+      wireHover();
+      observe();   // 先拿到 reduced 的初值，再决定第一帧怎么画
+      refresh();
+      maybeStart();
+
+      // 只读探针，供自动化测量（节点几何 / 帧数 / 运行状态）使用。
+      window.__constellation = {
+        nodes: function() {
+          return nodes.map(function(n) {
+            // imgState 暴露出来是因为画布被跨域头像污染，读像素会抛 SecurityError；
+            // 'failed' 就意味着那一帧画的是首字母圆盘（R9 的唯一可测量信号）。
+            // nameText/nameW/nameSize/nameMax 给名字框重叠量测用 —— 名字在圆盘上方，
+            // 框 = [cx ± nameW/2] × [cy-r-gap-nameSize, cy-r-gap]。
+            // flagIds/flagCount/flagState 是国旗的唯一可测信号（同上，读不了像素）；
+            // xClamped/yClamped 读出被边界钳住的节点 —— 有节点贴边时间距结论不可信。
+            var fs = n.flagIds.map(function(cid) {
+              var s = flagCache.get(cid);
+              return (s && s.state) || 'missing';
+            });
+            return { username: n.username, count: n.count, xR: n.xR, yR: n.yR,
+                     cx: n.cx, cy: n.cy, r: n.r, imgState: n.entry.state,
+                     nameText: n.nameText, nameW: n.nameW, nameSize: n.nameSize,
+                     nameMax: n.nameMax, countSize: n.countSize,
+                     flagIds: n.flagIds.slice(), flagCount: n.flagIds.length,
+                     flagState: fs, flagTotalW: n.flagIds.length
+                       ? n.flagIds.length * CONFIG.flag.w + (n.flagIds.length - 1) * CONFIG.flag.gap : 0,
+                     flagRowTop: n.cy + n.r + CONFIG.textGap,
+                     flagH: CONFIG.flag.h,
+                     countTop: n.cy + n.r + CONFIG.textGap + CONFIG.flag.h + CONFIG.flag.gapToCount,
+                     xClamped: n.xClamped, yClamped: n.yClamped };
+          });
+        },
+        status: function() {
+          return { n: state.n, speed: state.speed, size: state.size, linkPx: linkPx(), width: width,
+                   height: height, measured: measured, running: running,
+                   reduced: reduced, visible: visible, frames: frameCount, narrow: isNarrow(),
+                   nMin: nMin, nMax: nMax };
+        }
+      };
+    };
+  })();
+
+  /* Contributors 标题旁的说明弹窗。刻意放在星图模块**外面**：星图在没有贡献者时
+     整块不初始化（initConstellation 根本不会被调用），而说明按钮在那时也应该照常
+     可用 —— 它解释的是这个区块是什么，不是某一次渲染。 */
+  (function() {
+    var btn = document.getElementById('constellation-info-btn');
+    var panel = document.getElementById('constellation-info-panel');
+    if (!btn || !panel) return;
+
+    function setOpen(open) {
+      panel.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    btn.addEventListener('click', function() { setOpen(panel.hidden); });
+
+    // Esc 关闭并把焦点还给按钮；否则键盘用户关掉之后焦点会留在面板里的死元素上。
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Escape' || panel.hidden) return;
+      setOpen(false);
+      btn.focus();
+    });
+
+    // 点外面关闭。这次点击本身会先冒泡到按钮的处理器（已把它打开），所以按钮和面板
+    // 内部的点击必须排除掉，否则刚打开就被自己关掉。
+    document.addEventListener('click', function(e) {
+      if (panel.hidden) return;
+      if (btn.contains(e.target) || panel.contains(e.target)) return;
+      setOpen(false);
+    });
+  })();
+  </script>
+  <script>
+    // Fade a set of sections in together — shared by both homepage batches
+    function fadeInSections(selector) {
+      var sections = document.querySelectorAll(selector);
+      sections.forEach(function(sec) {
+        sec.style.opacity = '0';
+        sec.style.transition = 'opacity 0.25s ease';
+      });
+      requestAnimationFrame(function() {
+        sections.forEach(function(sec) { sec.style.opacity = '1'; });
+      });
+    }
+
+    // Batch 1: countries → cards/map, shown as soon as they load
+    window.__homeDataCore.then(function(countriesData) {
+      // Build country map (same shape as window._countryMap from utils.js)
+      var map = {};
+      (countriesData.countries || []).forEach(function(c) {
+        map[c.id] = {
+          name: c.name, flag: c.flag,
+          bounds_sw: c.bounds_sw, bounds_ne: c.bounds_ne,
+          active: c.active, sort_order: c.sort_order,
+          region_count: c.region_count
+        };
+      });
+      // Fallback if API returned empty
+      if (Object.keys(map).length === 0) {
+        map = {
+          'south-africa':  { name: 'South Africa',  flag: 'za',    bounds_sw: [-34.5, 17.0],   bounds_ne: [-22.5, 32.5],   active: true, sort_order: 0, region_count: 0 },
+          'paraguay':      { name: 'Paraguay',       flag: 'py',    bounds_sw: [-27.6, -62.6],  bounds_ne: [-19.3, -54.3],  active: true, sort_order: 1, region_count: 0 },
+          'canada':        { name: 'Canada',         flag: 'ca',    bounds_sw: [36.0, -142.0],  bounds_ne: [73.0, -50.0],   active: true, sort_order: 2, region_count: 0 },
+          'united-states': { name: 'United States',  flag: 'us',    bounds_sw: [24.5, -125.0],  bounds_ne: [49.5, -66.9],   active: true, sort_order: 3, region_count: 0 },
+          'hawaii':        { name: 'Hawaii',         flag: 'us-hi', bounds_sw: [18.5, -160.5],  bounds_ne: [22.5, -154.5],  active: true, sort_order: 4, region_count: 0 },
+          'turkey':        { name: 'Turkey',         flag: 'tr',    bounds_sw: [36.0, 26.0],    bounds_ne: [42.0, 45.0],    active: true, sort_order: 5, region_count: 0 }
+        };
+      }
+      window._countryMap = map;
+      // 首页显示名覆盖:港澳台用官方英文名(卡片/地图 tooltip/最近动态一致),底层 id 不变
+      var HOME_TERRITORY_NAMES = { 'hk': 'Hong Kong SAR', 'mo': 'Macau SAR', 'tw': 'Chinese Taipei' };
+      Object.keys(map).forEach(function(id) {
+        var label = HOME_TERRITORY_NAMES[map[id].flag];
+        if (label) map[id].name = label;
+      });
+      // world-map.js 可能加载失败（404/被拦截/解析错误）：静默跳过，避免中断整页渲染
+      if (typeof window.renderWorldMap === 'function') window.renderWorldMap(map);
+
+      // --- Country Cards ---
+      var grid = document.getElementById('country-grid');
+      grid.innerHTML = '';
+      var ids = sortCountryIds(map);
+      ids.forEach(function(id) {
+        var c = map[id];
+        var card = document.createElement('a');
+        card.className = 'country-card';
+        card.href = '/explore?country=' + id;
+        var flag = document.createElement('img');
+        flag.className = 'country-card__flag';
+        flag.src = 'https://flagcdn.com/w160/' + c.flag + '.png';
+        flag.alt = c.name;
+        flag.loading = 'lazy';
+        flag.onerror = function() { this.style.display = 'none'; };
+        var nameEl = document.createElement('div');
+        nameEl.className = 'country-card__name';
+        nameEl.textContent = c.name;
+        var count = document.createElement('div');
+        count.className = 'country-card__count';
+        count.textContent = (c.region_count || 0) + ' regions';
+        card.appendChild(flag);
+        card.appendChild(nameEl);
+        card.appendChild(count);
+        grid.appendChild(card);
+      });
+
+      // + card to propose new country/region
+      var plusCard = document.createElement('button');
+      plusCard.className = 'country-card country-card--add';
+      plusCard.setAttribute('aria-label', 'Propose a new country or region');
+      plusCard.innerHTML = '<div class="country-card__plus">+</div><div class="country-card__name">Propose New</div><div class="country-card__count">Country / Region</div>';
+      plusCard.addEventListener('click', function() {
+        openProposalModal();
+      });
+      grid.appendChild(plusCard);
+
+      // Batch 1 done — render hero stats and fade in view toggle + world map + hero stats
+      function renderHeroStats(map, contribData) {
+        var heroStats = document.getElementById('hero-stats');
+        var countEl = document.getElementById('hero-meta-count');
+        var flagsEl = document.getElementById('hero-top-countries');
+        var avatarsEl = document.getElementById('hero-top-contributors');
+        if (!heroStats || !countEl || !flagsEl || !avatarsEl) return;
+
+        // 1. Calculate total metas from active countries region_count
+        var totalMetas = 0;
+        Object.keys(map).forEach(function(k) {
+          totalMetas += (map[k] && map[k].region_count) || 0;
+        });
+
+        // 2. Top 5 countries by region_count
+        var countryList = Object.keys(map).map(function(k) { return map[k]; }).filter(function(c) {
+          return c && c.active && (c.region_count > 0);
+        });
+        countryList.sort(function(a, b) { return (b.region_count || 0) - (a.region_count || 0); });
+        var top5Countries = countryList.slice(0, 5);
+
+        flagsEl.innerHTML = '';
+        top5Countries.forEach(function(c) {
+          if (!c.flag) return;
+          var img = document.createElement('img');
+          img.className = 'hero__stats-flag';
+          img.src = 'https://flagcdn.com/w40/' + c.flag.toLowerCase() + '.png';
+          img.alt = c.name;
+          img.title = c.name + ': ' + (c.region_count || 0) + ' metas';
+          img.loading = 'lazy';
+          img.onerror = function() { this.style.display = 'none'; };
+          flagsEl.appendChild(img);
+        });
+
+        // 3. Top 5 contributors
+        var contribList = (contribData && Array.isArray(contribData.contributors))
+          ? contribData.contributors
+          : [];
+        var top5Contribs = contribList.slice(0, 5);
+
+        avatarsEl.innerHTML = '';
+        top5Contribs.forEach(function(u) {
+          var name = u.username || 'Contributor';
+          var count = u.count != null ? u.count : (u.cnt || 0);
+          var title = name + ': ' + count + ' contributions';
+          if (u.avatar_url) {
+            var aImg = document.createElement('img');
+            aImg.className = 'hero__stats-avatar';
+            aImg.src = u.avatar_url;
+            aImg.alt = name;
+            aImg.title = title;
+            aImg.loading = 'lazy';
+            aImg.onerror = function() {
+              var fallback = document.createElement('span');
+              fallback.className = 'hero__stats-avatar hero__stats-avatar--fallback';
+              fallback.title = title;
+              fallback.textContent = (name.charAt(0) || '?').toUpperCase();
+              if (this.parentNode) this.parentNode.replaceChild(fallback, this);
+            };
+            avatarsEl.appendChild(aImg);
+          } else {
+            var fallback = document.createElement('span');
+            fallback.className = 'hero__stats-avatar hero__stats-avatar--fallback';
+            fallback.title = title;
+            fallback.textContent = (name.charAt(0) || '?').toUpperCase();
+            avatarsEl.appendChild(fallback);
+          }
+        });
+
+        // 4. Smooth scroll interactions
+        function scrollToTarget(targetId) {
+          var el = document.getElementById(targetId);
+          if (!el) return;
+          if (el.hasAttribute('hidden') && window.__homeDataRest) {
+            window.__homeDataRest.then(function() {
+              el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+          } else {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+
+        flagsEl.addEventListener('click', function() {
+          scrollToTarget('view-toggle');
+        });
+        flagsEl.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            scrollToTarget('view-toggle');
+          }
+        });
+
+        avatarsEl.addEventListener('click', function() {
+          scrollToTarget('most-contributed');
+        });
+        avatarsEl.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            scrollToTarget('most-contributed');
+          }
+        });
+
+        // 5. Run count-up animation
+        function animateCount(el, target, duration) {
+          if (!el || !target) return;
+          if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            el.textContent = Number(target).toLocaleString();
+            return;
+          }
+          var startVal = Math.max(1, Math.min(10, Math.floor(target * 0.05)));
+          var range = target - startVal;
+          el.textContent = startVal.toLocaleString();
+          var startTime = null;
+
+          function step(timestamp) {
+            if (!startTime) startTime = timestamp;
+            var progress = Math.min((timestamp - startTime) / duration, 1);
+            var ease = 1 - Math.pow(1 - progress, 3);
+            var current = Math.round(startVal + range * ease);
+            el.textContent = current.toLocaleString();
+
+            if (progress < 1) {
+              requestAnimationFrame(step);
+            } else {
+              el.textContent = Number(target).toLocaleString();
+            }
+          }
+          requestAnimationFrame(step);
+        }
+
+        animateCount(countEl, totalMetas, 1400);
+      }
+
+      var contribPromise = window.__homeContribData || Promise.resolve({ contributors: [] });
+      contribPromise.then(function(contribData) {
+        renderHeroStats(map, contribData);
+        var heroStats = document.getElementById('hero-stats');
+        if (heroStats) heroStats.removeAttribute('hidden');
+        var coreToggle = document.getElementById('view-toggle');
+        if (coreToggle) coreToggle.removeAttribute('hidden');
+        var worldMapEl = document.getElementById('world-map');
+        if (worldMapEl) worldMapEl.removeAttribute('hidden');
+        fadeInSections('#hero-stats, #view-toggle, #world-map');
+        // 地图是默认视图：section 已可见，立即加载并显示（loadMap 幂等）
+        if (typeof window.showWorldMap === 'function') window.showWorldMap();
+      });
+    }).catch(function(err) {
+      console.error('Homepage core data load failed:', err);
+      document.getElementById('country-grid').innerHTML = '<p style="text-align:center;padding:2rem;">Unable to load. Please refresh.</p>';
+    });
+
+    // Batch 2: most-useful meta and below — shown together after all their data loads
+    window.__homeDataRest.then(function(results) {
+      var submissionsData = results[0];  // /api/submissions
+      var reactionsData = results[1];    // /api/reactions?action=top
+      var contributorsData = results[2]; // /api/submissions?action=contributors
+      var changelogData = results[3];    // data/changelog.json
+      var map = window._countryMap || {}; // country names for section links
+
+      // --- Recent Updates ---
+      // "Mine" 只是对**本页已下载的** /api/submissions 做客户端筛选 —— 不发新请求，
+      // 条目形状与跳转链接与 All 完全一致。代价是只看得见已批准的：刚提交、还在待审的
+      // 不在这一份里。所以 0 条时写的是 "no approved submissions"，而不是"你还没提交过"。
+      var recentSection = document.getElementById('recent-updates');
+      var recentList = document.getElementById('recent-list');
+      var recentLoading = document.getElementById('recent-loading');
+      var recentEmpty = document.getElementById('recent-empty');
+      var recentGate = document.getElementById('recent-gate');
+      var recentNote = document.getElementById('recent-note');
+      var recentNoteText = document.getElementById('recent-note-text');
+      var recentNoteLink = document.getElementById('recent-note-link');
+      var recentBtnAll = document.getElementById('recent-filter-all');
+      var recentBtnMine = document.getElementById('recent-filter-mine');
+      var allRecent = Array.isArray(submissionsData) ? submissionsData : [];
+      var RECENT_MAX = 5;
+
+      function showRecentNote(text, linkText) {
+        recentNoteText.textContent = text;
+        recentNoteLink.textContent = linkText;
+        recentNote.hidden = false;
+      }
+
+      function renderRecent(mode, user) {
+        var mine = mode === 'mine';
+        recentEmpty.hidden = true;
+        recentNote.hidden = true;
+        recentGate.hidden = !(mine && !user);
+        recentList.innerHTML = '';
+        if (mine && !user) return;   // 未登录：整个列表让位给登录提示
+
+        // s.user_id 是 API 里的提交者 id，与 /api/auth?action=me 的 user.id 同一空间。
+        var source = mine
+          ? allRecent.filter(function(s) { return !!s.user_id && s.user_id === user.id; })
+          : allRecent;
+        var shown = source.slice(0, RECENT_MAX);
+
+        shown.forEach(function(s) {
+          var item = document.createElement('a');
+          item.className = 'recent-update-item';
+          item.href = '/explore?country=' + (s.region || 'south-africa') + '&region=' + s.id;
+          var icon = document.createElement('span');
+          // 两类提交各带自己的标记：● 具体小区域（现状），★ 整个国家范围的 meta。
+          // 光换字符不够 —— 10px 下 ★ 和 ● 几乎分不出来，所以国家范围那条换字号与颜色
+          // （见 .recent-update-item__icon--country）。点击链接不变：?region=<id>
+          // 已经能打开无几何条目，标签栏由 map.js 的 _openRegionById 负责。
+          var isCountryScope = s.scope === 'country';
+          icon.className = 'recent-update-item__icon' + (isCountryScope ? ' recent-update-item__icon--country' : '');
+          icon.textContent = isCountryScope ? '★' : '●';
+          var rName = document.createElement('span');
+          rName.className = 'recent-update-item__name';
+          rName.textContent = s.name;
+          var rCountry = document.createElement('span');
+          rCountry.className = 'recent-update-item__country';
+          rCountry.textContent = map[s.region] ? map[s.region].name : (s.region || '');
+          var rDate = document.createElement('span');
+          rDate.className = 'recent-update-item__date';
+          // 通过时间，与列表的排序键同一个值（服务端按 first_approved_at 排）。
+          // 回退到 created_at 只为兜住"回填脚本还没跑"的老数据，不是主路径。
+          var shownAt = s.first_approved_at || s.created_at;
+          if (shownAt) {
+            try { rDate.textContent = new Date(shownAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); } catch(e) {}
+          }
+          item.appendChild(icon);
+          item.appendChild(rName);
+          item.appendChild(rCountry);
+          item.appendChild(rDate);
+          // "by 某人" 在 Mine 里指的就是用户自己，没有信息量。
+          if (!mine && s.submitted_by) {
+            var byUser = document.createElement('span');
+            byUser.className = 'recent-update-item__country';
+            byUser.textContent = 'by ' + s.submitted_by;
+            item.appendChild(byUser);
+          }
+          recentList.appendChild(item);
+        });
+
+        if (shown.length === 0) {
+          if (!mine) { recentEmpty.hidden = false; return; }
+          showRecentNote('No approved submissions yet.', '(Share your META~)');
+          return;
+        }
+        // 只提交过一个国家、且总数不超过 3 条 —— 推一把，让他去开第二个国家。
+        // 数的是同一个 source，所以这句话的前提和上面列出来的条目是同一份数据。
+        if (mine && source.length <= 3) {
+          var countries = {};
+          source.forEach(function(s) { countries[s.region || ''] = true; });
+          if (Object.keys(countries).length === 1) {
+            showRecentNote("Just one country so far. There's a whole world left to map.", 'Submit a region →');
+          }
+        }
+      }
+
+      function setRecentMode(mode) {
+        recentBtnAll.classList.toggle('is-active', mode === 'all');
+        recentBtnMine.classList.toggle('is-active', mode === 'mine');
+        recentBtnAll.setAttribute('aria-selected', mode === 'all' ? 'true' : 'false');
+        recentBtnMine.setAttribute('aria-selected', mode === 'mine' ? 'true' : 'false');
+        // auth.js 的 /api/auth?action=me 与 Batch 2 并行，谁先到不确定 —— 点击时再等一次
+        // 这个 Promise，拿到的一定是最终值（已 resolve 的会同步回调）。
+        Promise.resolve(window._authReady).then(function(u) { renderRecent(mode, u); });
+      }
+
+      recentBtnAll.addEventListener('click', function() { setRecentMode('all'); });
+      recentBtnMine.addEventListener('click', function() { setRecentMode('mine'); });
+
+      recentLoading.hidden = true;
+      recentSection.removeAttribute('hidden');
+      renderRecent('all', window._user);
+
+      // --- Most Useful Meta ---
+      var usefulSection = document.getElementById('most-useful');
+      var usefulViewport = document.getElementById('useful-viewport');
+      var usefulTrack = document.getElementById('useful-track');
+      var usefulLoading = document.getElementById('useful-loading');
+      var usefulEmpty = document.getElementById('useful-empty');
+      usefulLoading.hidden = true;
+      usefulSection.removeAttribute('hidden');
+      var topRegions = reactionsData.regions || [];
+      if (topRegions.length === 0) {
+        usefulEmpty.hidden = false;
+      } else {
+        // 卡片内容来自本页已下载的 /api/submissions（按 submissions.id 建索引，不新增请求）
+        var submissionsById = {};
+        (Array.isArray(submissionsData) ? submissionsData : []).forEach(function(s) {
+          submissionsById[s.id] = s;
+        });
+        var usefulCards = topRegions.map(function(r) {
+          return buildUsefulCard(r, submissionsById[r.region_id]);
+        });
+        usefulTrack.innerHTML = '';
+        usefulCards.forEach(function(card) { usefulTrack.appendChild(card); });
+
+        // 退化情形：一组卡片还没铺满视口时，复制会让同一张卡同屏出现两次。
+        // 量一组实宽（末卡 offsetLeft + 卡宽 + margin-right，轨道已 position:relative）；
+        // 只有实宽超过视口宽才复制并播放动画。
+        var lastCard = usefulCards[usefulCards.length - 1];
+        var setWidth = lastCard.offsetLeft + lastCard.offsetWidth +
+          (parseFloat(getComputedStyle(lastCard).marginRight) || 0);
+        if (setWidth > usefulViewport.clientWidth) {
+          usefulCards.forEach(function(card) {
+            // 复制组对辅助技术隐藏、且不进键盘 Tab 序列，避免同一张卡被读/聚焦两次
+            var clone = card.cloneNode(true);
+            clone.setAttribute('aria-hidden', 'true');
+            clone.setAttribute('tabindex', '-1');
+            // 卡片现在内部就有链接（覆盖式主链接 + 来源徽章）。只给克隆根设
+            // tabindex=-1 挡不住它们，克隆体会带着可聚焦链接留在 aria-hidden 子树里
+            //（axe 的 aria-hidden-focus）。逐个退出 Tab 序列，键盘用户只走原始那组。
+            clone.querySelectorAll('a').forEach(function(el) { el.setAttribute('tabindex', '-1'); });
+            // 只给 tabindex=-1 挡不住鼠标：mousedown 仍会把焦点放到链接上，于是焦点落在
+            // 一个 aria-hidden 元素里（axe 的 aria-hidden-focus）。这里不能用 inert ——
+            // 克隆卡有一半时间就在屏幕正中，inert 会让它们点不动，比这个毛病严重得多。
+            // preventDefault 只掐掉「按下即聚焦」，click 照常派发，导航不受影响。
+            clone.addEventListener('mousedown', function(e) { e.preventDefault(); });
+            usefulTrack.appendChild(clone);
+          });
+          usefulTrack.classList.add('useful-carousel__track--animated');
+          // 视口同步切成裁切态。基类默认是可滚（故障兜底，见 style.css 里的说明）
+          usefulViewport.classList.add('useful-carousel__viewport--animated');
+          // 位移改由本模块接管（design D1）。CSS keyframe 在同一个提交里已删除，
+          // 两者不可分开出货：只删 keyframe 不接 JS，卡片条会当场冻住。
+          initUsefulCarousel(usefulViewport, usefulTrack, setWidth);
+        } else {
+          // 非播放态没有 JS 位置机制，视口保持 overflow-x:auto 的原生可滚容器
+          //（R8b 的故障兜底）。探针仍要在，否则测试在窄集/窄屏下读不到任何状态。
+          window.__usefulCarousel = { state: function () {
+            return { installed: false, looping: false, offset: 0, setWidth: setWidth,
+                     viewportWidth: usefulViewport.clientWidth, paused: false, dragging: false,
+                     hovering: false, focusWithin: false, resumeAt: 0,
+                     reduceMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+                     scrollLeft: usefulViewport.scrollLeft };
+          } };
+        }
+      }
+
+      // Most Useful 卡片上的计数块。2026-10-04 起入场券从「👍 >= 2」放宽成
+      // 「goat / heart / useful 任一 >= 2」（见 api/reactions.js 的 action=top），
+      // 于是卡片**必须说明它为什么在这里** —— 只显 👍 的话，一张靠 goat 进来的
+      // 卡会渲染成「👍 0」，看着像坏了。
+      // 规则：在上面三项里，**只渲染计数达到门槛的那几项**；没达标的（含 1 和 0）不显。
+      //
+      // ⚠️ 这个类型清单与门槛值和服务端那一份是**同一个口径的两处**（服务端决定谁上榜，
+      // 这里决定显哪几个牌）。放宽门槛时两边一起改 —— 只改服务端会出现「上榜了但不显示
+      // 任何计数」；只改这里则会显示没达标的牌。类型顺序也要一致（goat → heart → useful）。
+      // ⚠️ 这两个常量必须**放在函数体内**，不能提到外面当模块级 var：
+      // 本函数的调用点（usefulCards = topRegions.map(...)）在源码顺序上**早于**这段声明，
+      // 靠的是函数声明提升。var 不提升赋值，提到外面就是「调用时还是 undefined」的
+      // TypeError —— 实测踩过一次（页面整个 useful 区不渲染，报错在 console 里）。
+      function buildUsefulCounts(r) {
+        var USEFUL_COUNT_TYPES = ['goat', 'heart', 'useful'];
+        var USEFUL_COUNT_MIN = 2;
+
+        var wrap = document.createElement('span');
+        wrap.className = 'useful-card__counts';
+        USEFUL_COUNT_TYPES.forEach(function(key) {
+          var n = Number(r[key + '_count']) || 0;
+          if (n < USEFUL_COUNT_MIN) return;
+
+          // 元数据（label / 图标路径）一律走 GEOGUIDE_REACTIONS 这个唯一出口 ——
+          // 不要在首页再抄一份类型表：图标本来就和探索弹窗的反应条共用同一份资产。
+          var meta = null;
+          for (var i = 0; i < GEOGUIDE_REACTIONS.length; i++) {
+            if (GEOGUIDE_REACTIONS[i].key === key) { meta = GEOGUIDE_REACTIONS[i]; break; }
+          }
+          var name = meta ? meta.label : key;
+
+          var cell = document.createElement('span');
+          cell.className = 'useful-card__count';
+          // 图标是装饰（alt=""），数字才是内容 —— 光留个「14」读屏器念不出是 14 个什么，
+          // 所以整格给 role="img" + aria-label。与 utils.js 的 buildReactionCounts 同一写法。
+          cell.setAttribute('role', 'img');
+          cell.setAttribute('aria-label', n + ' ' + name);
+
+          // Twemoji（SVG），不用系统 emoji 字体 —— 各平台画法差别很大。
+          // 自托管在 public/images/twemoji/：原本直接热链 cdn.jsdelivr.net，但那个域名
+          // 并非处处可达 —— 首页此前没有任何 jsdelivr 依赖，热链等于给首页新加一个单点。
+          var src = reactionIconSrc(key);
+          if (src) {
+            var icon = document.createElement('img');
+            icon.className = 'useful-card__thumb';
+            icon.src = src;
+            icon.alt = '';
+            icon.setAttribute('aria-hidden', 'true');
+            // 万一还是取不到就退回文字 —— 绝不能留一个空 img：alt="" 的破图在页面上
+            // 就是「什么都没有」，正是热链失败时看到的现象。退回的是**标签名**而不是
+            // 文字 emoji：破图时「GOAT 2」比一个字形更说明问题，也和 modal.js 的
+            // buildReactionIcon 兜底同一套做法。
+            icon.onerror = function() { this.replaceWith(document.createTextNode(name)); };
+            cell.appendChild(icon);
+          }
+          cell.appendChild(document.createTextNode(String(n)));
+          wrap.appendChild(cell);
+        });
+        // 三项都没达标：返回空容器而不是 null —— head 行本来就摆得下，
+        // 少一个"要不要 append"的分支（服务端回来的行不可能出现这种情形）。
+        return wrap;
+      }
+
+      // 构建一张 Most Useful 卡片：探索弹窗左栏内容（名称/国家/标签/短描述/👍/贡献者），
+      // 纯文本，无图片、无 Street View iframe。
+      function buildUsefulCard(r, s) {
+        var data = s || {};
+        var exploreHref = '/explore?country=' + (r.country_id || 'south-africa') + '&region=' + r.region_id;
+        // 根元素是 <div>，不是 <a>：卡片底部要放来源徽章，而徽章本身是链接，
+        // 在 <a> 里嵌 <a> 是非法 HTML，浏览器会把外层链接撕开。改法见文件末尾的
+        // .useful-card__link（覆盖式链接）与 .useful-card__source（抬到覆盖层之上）。
+        var card = document.createElement('div');
+        card.className = 'useful-card';
+
+        var head = document.createElement('div');
+        head.className = 'useful-card__head';
+        var uName = document.createElement('span');
+        uName.className = 'useful-card__name';
+        uName.textContent = r.name;
+        head.appendChild(uName);
+        // 国家名换成国旗。仓库既有做法就是 flagcdn（见 country-card__flag）。
+        // 地区没有旗，所以被替掉的是国家名，地区名照旧留在左边。
+        // 文字元素先建好：没有旗码、或旗子加载失败时直接拿它回退。
+        var country = map[r.country_id] || null;
+        var uCountry = document.createElement('span');
+        uCountry.className = 'useful-card__country';
+        uCountry.textContent = country ? country.name : (r.country_id || '');
+        if (country && country.flag) {
+          var flag = document.createElement('img');
+          flag.className = 'useful-card__flag';
+          flag.src = 'https://flagcdn.com/w80/' + country.flag + '.png';
+          // 国家名被旗子替掉了，alt 就成了读屏唯一的来源，不能留空
+          flag.alt = uCountry.textContent;
+          flag.loading = 'lazy';
+          flag.onerror = function() { this.replaceWith(uCountry); };
+          head.appendChild(flag);
+        } else {
+          head.appendChild(uCountry);
+        }
+        // 计数块和国旗同处 head 这一行，顺序就是 name → 国旗 → 计数。
+        // 原先它和投稿人并排在底部 meta 里；挪上来是为了让"多少"贴着地区身份。
+        head.appendChild(buildUsefulCounts(r));
+        card.appendChild(head);
+
+        if (data.description) {
+          var uDesc = document.createElement('p');
+          uDesc.className = 'useful-card__desc';
+          uDesc.textContent = data.description;
+          card.appendChild(uDesc);
+        }
+
+        // 投稿人单独一行。没有投稿人就不建这行 —— 空的 meta 只剩一个看不见的占位，
+        // 既占 DOM 又让"为什么这里少一块"变得难查。来源徽章与投稿人共用这一行，
+        // 所以只要两者有一个存在就建。
+        var badge = buildSourceBadge(data.source_type, data.source_url);
+        if (data.submitted_by || badge) {
+          var meta = document.createElement('div');
+          meta.className = 'useful-card__meta';
+          if (data.submitted_by) {
+            var uBy = document.createElement('span');
+            uBy.className = 'useful-card__by';
+            uBy.textContent = 'by ' + data.submitted_by;
+            meta.appendChild(uBy);
+          }
+          if (badge) {
+            // 抬到覆盖式链接之上，否则点徽章会被铺满整卡的卡片链接截走。
+            badge.classList.add('useful-card__source');
+            meta.appendChild(badge);
+          }
+          card.appendChild(meta);
+        }
+
+        // 主链接：透明覆盖层铺满整张卡（徽章是它的兄弟，不是子节点）。
+        // 链接本身没有可见文字，靠 aria-label 拿到可读名称。
+        var cardLink = document.createElement('a');
+        cardLink.className = 'useful-card__link';
+        cardLink.href = exploreHref;
+        cardLink.target = '_blank';
+        cardLink.rel = 'noopener noreferrer';
+        cardLink.setAttribute('aria-label', 'Open ' + r.name + ' in Explore');
+        card.appendChild(cardLink);
+
+        return card;
+      }
+
+      // 横向拖拽模块（design D1–D12）。位移不再由 CSS keyframe 拥有，而是 JS 记一个
+      // 实数 offset：轨道左边相对视口左边的位移，恒满足 offset ∈ (-setWidth, 0]。
+      // 之所以不用 scrollLeft 当载体：滚动容器在两端都会夹住（双向无限循环没有余量），
+      // 而且 scrollLeft 在部分平台按整数取整，换行时会看见亚像素跳动（design D1）。
+      // 取模换行则左右两个方向都没有墙。
+      function initUsefulCarousel(viewport, track, setWidth) {
+        // 一组宽度走完一圈是 44s —— 沿用被删掉那条 keyframe 的速度，不是新猜的值
+        //（design D3）。存比例不存绝对值：窄屏上按比例自然缩小，否则会连成一团。
+        var SPEED = setWidth / 44000;          // px/ms
+        var RESUME_MS = 2000;                  // 松手后多久恢复自走（R4）
+        var CLICK_SLOP = 6;                    // px：超过它算拖拽，不算点击（design D7）
+        var DECAY = 0.94;                      // 每 16.67ms 的惯性衰减（design D4）
+        var MIN_VELOCITY = 0.02;               // px/ms：低于它惯性停住
+
+        var offset = 0;
+        var dragging = false;
+        var hovering = false;
+        var focusWithin = false;
+        var resumeAt = 0;                      // 初值 0：now < 0 恒假，首帧不会平白暂停
+        var startX = 0;
+        var travel = 0;                        // 本次手势累计的横向路程
+        var velocity = 0;                      // px/ms，松手后靠它滑行
+        var lastX = 0, lastT = 0;
+        var lastPointerAt = 0;                 // 最近一次指针按下的时刻，用来区分鼠标/键盘聚焦
+        var last = performance.now();
+        var rafId = 0;
+        var running = false;
+        var handlersInstalled = false;
+
+        // MediaQueryList 只建一次。旧实现在 tick 里每帧 matchMedia(...)：既每帧分配一个
+        // 新的 MediaQueryList，又在降级态里永远排着 rAF —— 恰恰是对「减少动态效果」的
+        // 用户最不友好的做法。改成建一次 + change 监听，两个方向都立即生效
+        //（同 __constellation 的闸门做法，design D10）。
+        var mqReduce = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+        function reduced() { return !!(mqReduce && mqReduce.matches); }
+
+        // 绕一组宽度取模，结果落在 (-setWidth, 0]。两个同余端点都归 0，
+        // 所以 -setWidth 永不出现，不变量成立（design D2）。第二组是第一组的
+        // 逐像素副本，平移任意整数组宽都看不出接缝——和旧 keyframe 依赖的是同一条性质。
+        function wrap(v) {
+          var m = v % setWidth;
+          return m > 0 ? m - setWidth : m;
+        }
+        function apply() { track.style.transform = 'translateX(' + offset + 'px)'; }
+        function paused() {
+          return hovering || focusWithin || dragging || performance.now() < resumeAt;
+        }
+
+        function tick(ts) {
+          if (!running) return;                // stop() 之后迟到的回调直接返回，防双循环
+          var dt = Math.min(ts - last, 50);    // 后台标签页 rAF 不触发，不夹住会瞬移一大段
+          if (dt < 0) dt = 0;
+          last = ts;
+          // 键盘聚焦会让浏览器去滚最近的滚动祖先（视口即使 overflow:hidden 也能被
+          // 程序化滚动），那条滚动会和 transform 抢同一根轴。位置只有 transform 一个主人，
+          // 所以浏览器那侧的残留每帧清零（design D9）。
+          if (viewport.scrollLeft !== 0) viewport.scrollLeft = 0;
+          if (dragging) {
+            // 位移已由 pointermove 直接写入，这里不再推进
+          } else if (velocity !== 0) {
+            offset = wrap(offset + velocity * dt);
+            velocity *= Math.pow(DECAY, dt / 16.67);
+            if (Math.abs(velocity) < MIN_VELOCITY) velocity = 0;
+            apply();
+          } else if (!paused()) {
+            offset = wrap(offset - SPEED * dt);
+            apply();
+          }
+          rafId = requestAnimationFrame(tick);
+        }
+        // 降级态一帧都不排（同 __constellation 的 D3）。全站那条 prefers-reduced-motion
+        // 规则是纯 CSS，压的是 animation/transition，够不到 rAF，所以这道闸必须自己在
+        // JS 里设（design D10）。
+        function start() {
+          if (running || reduced()) return;
+          running = true;
+          last = performance.now();
+          rafId = requestAnimationFrame(tick);
+        }
+        function stop() {
+          running = false;
+          if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+        }
+
+        // 拖拽期间在 window 上听 move/up，而不是 viewport.setPointerCapture()。
+        // 指针捕获会把随后的 pointerup/mouseup/click 一起改派到捕获元素上
+        //（实测 Firefox：mouseup 与 click 的 target 变成视口），于是卡片的覆盖式
+        // 链接永远收不到 click，R6「阈值以内照常导航」当场失效。
+        // 换成 window 监听后，拖出视口同样收得到事件，而 click 的目标保持自然。
+        function onMove(e) {
+          if (!dragging) return;
+          var dx = e.clientX - startX;
+          startX = e.clientX;
+          offset = wrap(offset + dx);
+          travel += Math.abs(dx);
+          apply();
+          var t = performance.now();
+          var vt = t - lastT;
+          if (vt > 0) velocity = (e.clientX - lastX) / vt;
+          lastX = e.clientX; lastT = t;
+        }
+        function endDrag() {
+          if (!dragging) return;
+          dragging = false;
+          window.removeEventListener('pointermove', onMove);
+          window.removeEventListener('pointerup', endDrag);
+          window.removeEventListener('pointercancel', endDrag);
+          viewport.classList.remove('useful-carousel__viewport--dragging');
+          // 真拖拽（过了阈值）不能把焦点留在卡片链接上：mousedown 会给链接聚焦，
+          // 而 focusWithin 会把自走一直按停 —— 用户拖一下卡片条，它就再也不动了。
+          // 松手前一瞬若已停住，最后那次采样是陈旧的，会让「按住不动再松手」也甩出去，
+          // 所以超过 100ms 的采样直接归零。
+          if (travel > CLICK_SLOP && track.contains(document.activeElement)) {
+            document.activeElement.blur();
+          }
+          if (performance.now() - lastT > 100) velocity = 0;
+          resumeAt = performance.now() + RESUME_MS;
+        }
+        function onPointerDown(e) {
+          if (reduced() || e.button !== 0) return;   // 只认主键
+          dragging = true;
+          startX = e.clientX;
+          travel = 0; velocity = 0;
+          lastX = e.clientX; lastT = performance.now();
+          lastPointerAt = lastT;
+          viewport.classList.add('useful-carousel__viewport--dragging');
+          window.addEventListener('pointermove', onMove);
+          window.addEventListener('pointerup', endDrag);
+          window.addEventListener('pointercancel', endDrag);
+          // 这里绝不能 preventDefault：那会掐掉「按下即聚焦」，也会影响 click 的派发
+        }
+        // 拖拽与点击的歧义消解：每张卡都被一条铺满整卡的 <a> 盖住，超过阈值的
+        // 手势必须在捕获阶段就掐掉，否则那条链接会先收到 click（design D7）。
+        // 阈值以内一律放行 —— 包括克隆那半的点击。detail !== 0 排除键盘触发的
+        // click（Enter 的 MouseEvent.detail 是 0），否则上一次拖拽遗留的 travel
+        // 会把键盘导航也一起吞掉。
+        function onClickCapture(e) {
+          if (e.detail !== 0 && travel > CLICK_SLOP) { e.stopPropagation(); e.preventDefault(); }
+          travel = 0;
+        }
+        // 卡片上覆盖着 <a>，里面还有国旗和 Twemoji 两张 <img>：按住一拖就会触发
+        // 原生链接/图片拖拽，而原生拖拽会打断 pointer 事件（pointercancel），
+        // 手势当场冻结。一个 dragstart 同时盖住这三处（design D8）。
+        // 不用 inert —— 克隆卡有一半时间就在屏幕正中，inert 会让它们点不动。
+        function onDragStart(e) { e.preventDefault(); }
+        // 触控板的横向滚动。竖向滚轮一律不碰：页面照旧从卡片条上滚过去，
+        // 只有横向意图（页面没有别的用处）才消费（design D3）。
+        function onWheel(e) {
+          if (reduced()) return;
+          var d = e.deltaX || (e.shiftKey ? e.deltaY : 0);
+          if (!d) return;                    // 纯竖向滚轮：不移动、也不 preventDefault
+          offset = wrap(offset - d);
+          apply();
+          resumeAt = performance.now() + RESUME_MS;
+          e.preventDefault();
+        }
+        // 悬停暂停用 mouseenter/mouseleave，而不是 pointerenter —— 后者在触摸上
+        // 也会触发，一次瞬时「悬停」在那里没有意义（design D6）。
+        function onMouseEnter() { hovering = true; }
+        function onMouseLeave() { hovering = false; }
+        function onFocusIn(e) { focusWithin = true; reveal(e.target); }
+        function onFocusOut(e) {
+          // relatedTarget 仍在轨道内（焦点在卡片之间移动）就还没离开
+          if (!track.contains(e.relatedTarget)) focusWithin = false;
+        }
+
+        // 幂等装/卸：降级开关在页面打开后可以来回切，不能只在 init 时算一次
+        //（旧实现里 installed 只算一次，把降级关掉时那条路径是半死的）。
+        // 降级态一律不装：那里视口是原生可滚容器，装上反而会跟它抢位置（design D10）。
+        function installHandlers() {
+          if (handlersInstalled) return;
+          handlersInstalled = true;
+          viewport.addEventListener('pointerdown', onPointerDown);
+          viewport.addEventListener('click', onClickCapture, true);
+          viewport.addEventListener('dragstart', onDragStart);
+          viewport.addEventListener('wheel', onWheel, { passive: false });
+          viewport.addEventListener('mouseenter', onMouseEnter);
+          viewport.addEventListener('mouseleave', onMouseLeave);
+          viewport.addEventListener('focusin', onFocusIn);
+          viewport.addEventListener('focusout', onFocusOut);
+        }
+        function uninstallHandlers() {
+          if (!handlersInstalled) return;
+          handlersInstalled = false;
+          viewport.removeEventListener('pointerdown', onPointerDown);
+          viewport.removeEventListener('click', onClickCapture, true);
+          viewport.removeEventListener('dragstart', onDragStart);
+          viewport.removeEventListener('wheel', onWheel);
+          viewport.removeEventListener('mouseenter', onMouseEnter);
+          viewport.removeEventListener('mouseleave', onMouseLeave);
+          viewport.removeEventListener('focusin', onFocusIn);
+          viewport.removeEventListener('focusout', onFocusOut);
+        }
+
+        // 键盘 Tab 到屏外卡片时，把这张卡挪进视口可见框 —— 靠改 offset，不靠 scrollLeft，
+        // 横向位置的唯一主人是 transform（design D9）。
+        function reveal(el) {
+          if (!el || reduced()) return;
+          // 鼠标点击同样会触发 focusin，但那时绝不能挪轨道：卡片就在指针底下，
+          // mousedown 到 mouseup 之间把轨道抽走，click 的 mousedown/mouseup 目标就
+          // 不再是同一个元素，click 会派发到两者的共同祖先（轨道）上，卡片自己的
+          // 链接收不到 —— 点卡不跳转。偏移一旦跨过取模边界还会整整平移一组宽度：
+          // 同屏像素不变、命中的 DOM 节点却换了人，更难查。
+          // 键盘 Tab 之前没有 pointerdown，照常把屏外卡片挪进可见框（R9）。
+          if (performance.now() - lastPointerAt < 300) return;
+          var card = el.closest ? el.closest('.useful-card') : null;
+          if (!card || !track.contains(card)) return;
+          // 先清掉浏览器可能加上的滚动再量，量出来的矩形才只反映 transform
+          if (viewport.scrollLeft !== 0) viewport.scrollLeft = 0;
+          var vr = viewport.getBoundingClientRect();
+          var cr = card.getBoundingClientRect();
+          if (cr.left >= vr.left && cr.right <= vr.right) return;   // 整张都看得见，不用动
+          if (cr.left < vr.left) offset = wrap(offset + (vr.left - cr.left));
+          else offset = wrap(offset - (cr.right - vr.right));
+          apply();
+        }
+
+        // 降级开关：开 → 停帧、清 transform、卸处理器；关 → 装处理器、起帧。
+        // 用 change 监听而不是每帧轮询，两个方向都立即生效（design D10）。
+        // 注意顺序：降级态一帧都不排、一个处理器都不装，正是 R10 要的静态可滚条。
+        function applyReducedState() {
+          if (reduced()) {
+            stop();
+            offset = 0;
+            // 降级态轨道上不留 transform：位置整个交还给视口的原生横向滚动，
+            // 否则 transform 与 scrollLeft 会同时拥有一根轴。
+            track.style.transform = '';
+            uninstallHandlers();
+          } else {
+            installHandlers();
+            start();
+          }
+        }
+        if (mqReduce) {
+          if (mqReduce.addEventListener) mqReduce.addEventListener('change', applyReducedState);
+          else if (mqReduce.addListener) mqReduce.addListener(applyReducedState);   // 老 Safari
+        }
+        applyReducedState();
+
+        // 只读探针（design D12）。transform 归 JS 之后 DOM 上没有任何属性记录位置，
+        // 测试只能从这里读 —— 和 __constellation 同一个理由：探针是唯一的接缝。
+        // 它没有写入口，只能读。
+        window.__usefulCarousel = { state: function () {
+          return {
+            installed: handlersInstalled,
+            looping: true,
+            running: running,
+            offset: offset,
+            setWidth: setWidth,
+            viewportWidth: viewport.clientWidth,
+            paused: paused(),
+            dragging: dragging,
+            hovering: hovering,
+            focusWithin: focusWithin,
+            resumeAt: resumeAt,
+            reduceMotion: reduced(),
+            scrollLeft: viewport.scrollLeft
+          };
+        } };
+      }
+
+      // --- Most Contributed ---
+      // R1：五行文字列表与 "Show all contributors" 开关都换成画布星图。
+      // 折叠/展开的能力由"一次取回全部（limit=0）"承担，反而少了一次网络请求。
+      // 参数已锁定（20 / 0.3 / 1.0 / 150px），不再有 tuning 面板。
+      var contribSection = document.getElementById('most-contributed');
+      var contribLoading = document.getElementById('contributed-loading');
+      var contribEmpty = document.getElementById('contributed-empty');
+      var contribRoot = document.getElementById('constellation-root');
+      contribLoading.hidden = true;
+      contribSection.removeAttribute('hidden');
+      var contributors = contributorsData.contributors || [];
+      if (contributors.length === 0) {
+        contribEmpty.hidden = false;
+        contribRoot.hidden = true;    // 空的 500px 画布比空列表更像个 bug
+      } else {
+        // R5：必须等 hidden 摘掉之后再初始化。隐藏状态下容器量到 0×0，
+        // 整个场景会渲染成零尺寸，而且要等到窗口 resize 才会恢复。
+        try {
+          initConstellation(contributors);
+        } catch (e) {
+          // 星图抛异常不能连坐后面的 Site Updates 与 footer（同一个 .then 里）。
+          // 最坏情况是这一块空掉，页面其余部分照常 —— 名单镜像是在 init 内部建的，
+          // 若在 measure/syncCount 阶段就抛，镜像也一起没有，不会出现
+          // "画布空着但名单还在"这种半吊子状态。
+          console.error('Contributor constellation failed:', e);
+        }
+      }
+
+      // --- Site Updates ---
+      var updatesSection = document.getElementById('site-updates');
+      var updatesList = document.getElementById('updates-list');
+      var updatesLoading = document.getElementById('updates-loading');
+      var updatesEmpty = document.getElementById('updates-empty');
+      updatesLoading.hidden = true;
+      updatesSection.removeAttribute('hidden');
+      if (!changelogData || changelogData.length === 0) {
+        updatesEmpty.hidden = false;
+      } else {
+        var COLLAPSED_COUNT = 4;
+        var needsCollapse = changelogData.length > COLLAPSED_COUNT + 1;
+        var collapsedItems = [];
+        changelogData.forEach(function(entry, i) {
+          var item = document.createElement('div');
+          item.className = 'recent-update-item';
+          item.style.cssText = 'pointer-events:none;';
+          var sDate = document.createElement('span');
+          sDate.className = 'recent-update-item__date';
+          sDate.textContent = entry.date;
+          var sSummary = document.createElement('span');
+          sSummary.className = 'recent-update-item__name';
+          sSummary.textContent = entry.summary;
+          item.appendChild(sDate);
+          item.appendChild(sSummary);
+          updatesList.appendChild(item);
+          var isLast = i === changelogData.length - 1;
+          if (needsCollapse && i >= COLLAPSED_COUNT && !isLast) {
+            item.style.display = 'none';
+            collapsedItems.push(item);
+          }
+        });
+        if (needsCollapse) {
+          var toggleRow = document.createElement('div');
+          toggleRow.className = 'recent-update-item';
+          toggleRow.style.cssText = 'cursor:pointer;color:var(--soil-dark);font-size:13px;justify-content:center;';
+          var toggleLink = document.createElement('span');
+          toggleLink.textContent = 'Show all ' + changelogData.length + ' entries →';
+          toggleRow.appendChild(toggleLink);
+          toggleRow.addEventListener('click', function() {
+            var isExpanded = collapsedItems[0].style.display !== 'none';
+            collapsedItems.forEach(function(it) { it.style.display = isExpanded ? 'none' : ''; });
+            toggleLink.textContent = isExpanded ? 'Show all ' + changelogData.length + ' entries →' : '← Show fewer';
+          });
+          updatesList.appendChild(toggleRow);
+        }
+      }
+
+      // Batch 2 done — fade in the remaining sections together
+      document.getElementById('site-footer').removeAttribute('hidden');
+      // 按视觉顺序列（选择器列表顺序对本函数只是排版，不影响行为）
+      fadeInSections('#most-useful, #most-contributed, #recent-updates, #site-updates, #site-footer');
+    }).catch(function(err) {
+      console.error('Homepage secondary data load failed:', err);
+    });
+  </script>
+<script>(function(){var p=location.pathname;fetch('/api/pageview?page='+encodeURIComponent(p),{method:'POST'})})();</script>
+<script>
+function disableWhile(btn, text, promise) {
+  var original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = text;
+  btn.style.opacity = '0.6';
+  btn.style.cursor = 'not-allowed';
+  promise.finally(function() {
+    btn.disabled = false;
+    btn.textContent = original;
+    btn.style.opacity = '';
+    btn.style.cursor = '';
+  });
+  return promise;
+}
+
+function showToast(msg, isHtml) {
+  // Create toast element if it doesn't exist
+  var toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  if (isHtml) { toast.innerHTML = msg; }
+  else { toast.textContent = msg; }
+  toast.hidden = false;
+  toast.classList.add('toast--visible');
+  clearTimeout(toast._timeout);
+  toast._timeout = setTimeout(function() {
+    toast.classList.remove('toast--visible');
+    setTimeout(function() { toast.hidden = true; }, 300);
+  }, 4000);
+}
+
+// --- Proposal Modal ---
+var PRC_COUNTRY_LIST = [
+  "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan",
+  "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi",
+  "Cabo Verde", "Cambodia", "Cameroon", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo", "Costa Rica", "Cote d'Ivoire", "Croatia", "Cuba", "Cyprus", "Czech Republic",
+  "Democratic Republic of the Congo", "Denmark", "Djibouti", "Dominica", "Dominican Republic",
+  "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia",
+  "Fiji", "Finland", "France",
+  "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana",
+  "Haiti", "Honduras", "Hungary",
+  "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy",
+  "Jamaica", "Japan", "Jordan",
+  "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan",
+  "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg",
+  "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar",
+  "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway",
+  "Oman",
+  "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Peru", "Philippines", "Poland", "Portugal",
+  "Qatar",
+  "Romania", "Russia", "Rwanda",
+  "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria",
+  "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkmenistan", "Tuvalu",
+  "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "Uruguay", "Uzbekistan",
+  "Vanuatu", "Vatican City", "Venezuela", "Vietnam",
+  "Yemen",
+  "Zambia", "Zimbabwe"
+];
+
+// SVG 国家名（@svg-maps/world，源自 Natural Earth）与 PRC 列表命名不一致的别名映射，
+// 用于世界地图点击灰色国家时正确预选提案弹窗的下拉项。
+var COUNTRY_NAME_ALIASES = {
+  "Côte d'Ivoire": "Cote d'Ivoire",
+  "Macedonia": "North Macedonia",
+  "Swaziland": "Eswatini",
+  "Democratic Republic of Congo": "Democratic Republic of the Congo",
+  "Republic of Congo": "Congo",
+  "Brunei Darussalam": "Brunei",
+  "Cape Verde": "Cabo Verde"
+};
+
+function openProposalModal(preselectName) {
+  var modal = document.getElementById('proposal-modal');
+  var backdrop = document.getElementById('proposal-backdrop');
+  var select = document.getElementById('proposal-country-select');
+
+  // Clear any pending close timeout (prevents race with open)
+  clearTimeout(modal._closeTimeout);
+
+  // Populate country dropdown — filter out existing countries
+  select.innerHTML = '<option value="">-- Select a country --</option>';
+  var existingNames = {};
+  if (window._countryMap) {
+    Object.keys(window._countryMap).forEach(function(id) {
+      existingNames[window._countryMap[id].name] = true;
+    });
+  }
+  PRC_COUNTRY_LIST.forEach(function(name) {
+    if (!existingNames[name]) {
+      var opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+  });
+
+  // Bind dimming — set onchange/onfocus directly on the element objects
+  var regionInput = document.getElementById('proposal-region');
+  var regionEl = regionInput.parentElement;
+  var countryEl = select.parentElement;
+  select.onclick = function() {
+    countryEl.style.opacity = ''; countryEl.style.pointerEvents = '';
+    regionEl.style.opacity = '0.3'; regionEl.style.pointerEvents = 'none';
+  };
+  select.onchange = function() {
+    if (!select.value) { resetDim(); }
+  };
+  select.onblur = function() {
+    if (!select.value) { resetDim(); }
+  };
+  regionInput.oninput = function() {
+    if (regionInput.value.trim()) { countryEl.style.opacity = '0.3'; countryEl.style.pointerEvents = 'none'; }
+    else { resetDim(); }
+  };
+  function resetDim() {
+    countryEl.style.opacity = ''; countryEl.style.pointerEvents = '';
+    regionEl.style.opacity = ''; regionEl.style.pointerEvents = '';
+  }
+
+  // Reset form
+  document.getElementById('proposal-region').value = '';
+  document.getElementById('proposal-reason').value = '';
+  document.getElementById('proposal-error').style.display = 'none';
+  setMetaIntent(null);
+  // Reset dimming
+  resetDim();
+
+  // 世界地图点击「未覆盖国家」时预选该国
+  if (preselectName) {
+    // SVG 名与 PRC 列表名不一致时先归一化，否则精确匹配不上（如 Côte d'Ivoire → Cote d'Ivoire）
+    var target = COUNTRY_NAME_ALIASES[preselectName] || preselectName;
+    for (var optIdx = 0; optIdx < select.options.length; optIdx++) {
+      if (select.options[optIdx].value === target) {
+        select.value = target;
+        countryEl.style.opacity = ''; countryEl.style.pointerEvents = '';
+        regionEl.style.opacity = '0.3'; regionEl.style.pointerEvents = 'none';
+        break;
+      }
+    }
+  }
+
+  // Show
+  modal.hidden = false;
+  backdrop.hidden = false;
+  backdrop.removeAttribute('aria-hidden');
+  document.body.style.overflow = 'hidden';
+  requestAnimationFrame(function() {
+    modal.classList.add('is-open');
+    backdrop.classList.add('is-open');
+  });
+}
+
+function closeProposalModal() {
+  var modal = document.getElementById('proposal-modal');
+  var backdrop = document.getElementById('proposal-backdrop');
+  modal.classList.remove('is-open');
+  backdrop.classList.remove('is-open');
+  modal._closeTimeout = setTimeout(function() {
+    modal.hidden = true;
+    backdrop.hidden = true;
+    backdrop.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }, 250);
+}
+
+var metaIntent = null;
+function setMetaIntent(value) {
+  metaIntent = value;
+  document.querySelectorAll('#proposal-meta-toggle .meta-toggle-btn').forEach(function(b) {
+    var on = b.getAttribute('data-value') === value;
+    b.classList.toggle('is-selected', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+document.querySelectorAll('#proposal-meta-toggle .meta-toggle-btn').forEach(function(b) {
+  b.addEventListener('click', function() { setMetaIntent(b.getAttribute('data-value')); });
+});
+setMetaIntent(null);
+
+document.getElementById('proposal-submit-btn').addEventListener('click', function() {
+  var countryVal = document.getElementById('proposal-country-select').value;
+  var regionVal = document.getElementById('proposal-region').value.trim();
+  var reasonVal = document.getElementById('proposal-reason').value.trim();
+  var errorEl = document.getElementById('proposal-error');
+
+  // Determine which field was filled
+  var proposedName, proposalType;
+  if (countryVal && regionVal) {
+    errorEl.textContent = 'Please fill in either Country or Region, not both.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (countryVal) {
+    proposedName = countryVal;
+    proposalType = 'country';
+  } else if (regionVal) {
+    proposedName = regionVal;
+    proposalType = 'region';
+  } else {
+    errorEl.textContent = 'Please select a country or enter a region name.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  if (proposalType === 'region' && proposedName.length > 20) {
+    errorEl.textContent = 'Region name must be 20 characters or fewer.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (proposedName.length < 2) {
+    errorEl.textContent = 'Name must be at least 2 characters.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (reasonVal.length > 60) {
+    errorEl.textContent = 'Reason must be 60 characters or fewer.';
+    errorEl.style.display = 'block';
+    return;
+  }
+  if (!metaIntent) {
+    errorEl.textContent = 'Please choose whether you want to provide or learn meta.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  if (!window._user) {
+    errorEl.innerHTML = 'Please <a href="/api/auth?action=login" style="color:var(--soil-dark);text-decoration:underline;">login with Discord</a> to submit proposals.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  var btn = document.getElementById('proposal-submit-btn');
+  disableWhile(btn, 'Submitting...', fetch('/api/user-submissions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+    body: JSON.stringify({ action: 'propose-country', proposed_name: proposedName, proposal_type: proposalType, reason: reasonVal, meta_intent: metaIntent })
+  })
+  .then(function(r) { return r.json().then(function(data) { return { ok: r.ok, data: data }; }); })
+  .then(function(result) {
+    if (result.data.error) {
+      errorEl.textContent = result.data.error;
+      errorEl.style.display = 'block';
+      return;
+    }
+    // Success
+    closeProposalModal();
+    showToast('Proposal submitted! Thanks for your suggestion.');
+  })
+  .catch(function() {
+    errorEl.textContent = 'Network error. Please try again.';
+    errorEl.style.display = 'block';
+  }));
+});
+
+// Close handlers
+document.getElementById('proposal-modal-close').addEventListener('click', closeProposalModal);
+document.getElementById('proposal-cancel-btn').addEventListener('click', closeProposalModal);
+document.getElementById('proposal-backdrop').addEventListener('click', function(e) {
+  if (e.target === e.currentTarget) closeProposalModal();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && !document.getElementById('proposal-modal').hidden) {
+    closeProposalModal();
+  }
+});
+</script>
+</body>
+</html>

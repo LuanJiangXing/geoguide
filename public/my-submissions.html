@@ -1,0 +1,1984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Submissions — GeoGuide</title>
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCI+PGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMjgiIGZpbGw9IiM0QTdDNTkiIHN0cm9rZT0iIzNCNjA0NyIgc3Ryb2tlLXdpZHRoPSIyLjUiLz48ZWxsaXBzZSBjeD0iMzIiIGN5PSIzMiIgcng9IjEyIiByeT0iMjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iIzhEQkY5QSIgc3Ryb2tlLXdpZHRoPSIxLjgiIG9wYWNpdHk9IjAuNyIvPjxsaW5lIHgxPSI0IiB5MT0iMzIiIHgyPSI2MCIgeTI9IjMyIiBzdHJva2U9IiM4REJGOUEiIHN0cm9rZS13aWR0aD0iMS44IiBvcGFjaXR5PSIwLjciLz48cGF0aCBkPSJNMzIgMTZjLTYgMC0xMSA0LjUtMTEgMTAgMCA3LjUgMTEgMjIgMTEgMjJzMTEtMTQuNSAxMS0yMmMwLTUuNS01LTEwLTExLTEweiIgZmlsbD0iI0Y0RDM1RSIgc3Ryb2tlPSIjQzRBNTJBIiBzdHJva2Utd2lkdGg9IjEuOCIvPjxjaXJjbGUgY3g9IjMyIiBjeT0iMjYiIHI9IjQiIGZpbGw9IiNDNEE1MkEiLz48L3N2Zz4=">
+  <!-- Warm up the CDN origins this page actually fetches from. Scripts are load-time and
+       block parsing, so they get a full preconnect (no `crossorigin` — classic <script> is a
+       no-cors fetch, and adding it would open a second, unused connection). Image origins are
+       only needed once content renders, so they get dns-prefetch instead of a connection that
+       would sit idle and be reaped. Credit links in the footer point at domains this page never
+       requests — they are deliberately absent. -->
+  <link rel="preconnect" href="https://unpkg.com" />
+  <link rel="dns-prefetch" href="https://tile.openstreetmap.org" />
+  <!-- 国旗（卡片第二行）。按上面那条规矩：图片源只 dns-prefetch，不占一条会闲置的连接。 -->
+  <link rel="dns-prefetch" href="https://flagcdn.com" />
+  <!-- 顺序要紧：leaflet.css 在前、style.css 在后，和 explore.html 一致。
+       leaflet.css 里 `.leaflet-bar a` 会写 display:block，我们靠
+       `.leaflet-control-zoom a`（同优先级）写 display:flex 来居中 +/-。
+       顺序反了 leaflet 就反超，+/- 会被它的 line-height:30px 顶到盒子上半部分
+       （实测字形中心偏高 7px，盒子本身仍是 44x44）。 -->
+  <script src="js/theme.js?v=3"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="css/style.css?v=171" />
+</head>
+<body class="allow-scroll">
+  <nav class="nav">
+    <a href="/" class="nav__logo">GeoGuide</a>
+  </nav>
+
+  <div id="my-submissions-content" style="display:none;">
+  <!-- 这一列的最大宽度写在 style.css 的 .my-submissions 里。以前是内联 style：
+       内联样式在级联里高于任何样式表规则，放大态要放宽它就必须先搬出来。 -->
+  <main class="my-submissions">
+    <h1 style="font-family:var(--font-display);font-size:24px;margin-bottom:8px;">My Submissions</h1>
+    <div id="toast" class="toast" hidden></div>
+
+    <!-- Custom confirm dialog (Cancel is the highlighted / safer default) -->
+    <div id="confirm-overlay" class="confirm-overlay" hidden>
+      <div class="confirm-dialog">
+        <p id="confirm-msg"></p>
+        <div class="confirm-dialog__actions">
+          <button id="confirm-cancel-btn" class="modal-btn modal-btn--ghost">Cancel</button>
+          <button id="confirm-ok-btn" class="modal-btn modal-btn--primary">OK</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 三行筛选键拼成一整块分段控件（行内 gap 0、行间 -1px 让边框重合）。
+         具体几何全在 style.css 的「My Submissions 筛选键」一节，这里不再写内联 margin ——
+         内联样式会盖过后面的样式表规则，上一轮已经踩过一次。 -->
+    <!-- 视图切换（List/Map）。必须留在 #controls-wrap 外面：地图视图下 controls-wrap
+         整个隐藏，而它是切回 List 的唯一入口。 -->
+    <div class="review-tabs__row" id="view-tabs">
+      <button class="review-tab is-active" data-view="list">List</button>
+      <button class="review-tab" data-view="map">Map</button>
+    </div>
+
+    <div id="controls-wrap">
+      <!-- Row 1: visibility -->
+      <div class="review-tabs__row" id="visibility-tabs">
+        <button class="review-tab is-active" data-visibility="active">Active</button>
+        <button class="review-tab" data-visibility="hidden">Hidden</button>
+        <button class="review-tab" data-visibility="trash">Trash</button>
+      </div>
+      <!-- Row 2: review status (only for Active) -->
+      <div class="review-tabs__row" id="status-tabs">
+        <button class="review-tab is-active" data-status="all">All</button>
+        <button class="review-tab" data-status="pending">Pending</button>
+        <button class="review-tab" data-status="approved">Approved</button>
+        <button class="review-tab" data-status="rejected">Rejected</button>
+      </div>
+      <!-- 搜索 / 排序 / 国家筛选：原来和 status-tabs 挤在同一行，现在独立成行，
+           边缘不再和上面的分段块参差。 -->
+      <div class="my-filter-row">
+        <button class="sort-toggle" id="sort-toggle" title="Sort by submission time">Newest first ▾</button>
+        <div class="country-filter" id="country-filter" hidden>
+          <button class="country-filter__btn" id="country-filter-btn">
+            All Countries
+            <span class="country-filter__badge" id="country-filter-badge" hidden></span>
+          </button>
+          <div class="country-filter__menu" id="country-filter-menu"></div>
+        </div>
+        <!-- 搜索放大镜。放在这一行的最后一个筛选控件之后、notes 链接之前：notes 有
+             margin-left:auto 顶着行尾，所以放大镜右侧直到 notes 之间那段空白正好用来展开输入框，
+             不会盖住排序 / 国家两个可点按钮（放行首就会盖住）。
+             开关逻辑在 js/search-chip.js，与 explore 共用同一份实现。 -->
+        <div class="search-chip" id="name-search-chip">
+          <button type="button" class="search-chip__toggle" id="name-search-toggle"
+                  aria-label="Search by name" aria-expanded="false" aria-controls="name-search"
+                  title="Search by name">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"
+                 fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15z"/>
+            </svg>
+          </button>
+          <div class="search-chip__field" id="name-search-field" hidden>
+            <input type="search" id="name-search" class="search-chip__input" placeholder="Search by name…"
+                   aria-label="Search by name" autocomplete="off" maxlength="40" />
+            <button type="button" class="search-chip__clear" id="name-search-clear"
+                    aria-label="Clear search" title="Clear search" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M6 6l12 12M18 6L6 18"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <!-- 从 h1 下面搬过来的：放在筛选栏的右端，靠 margin-left:auto 顶到行尾 -->
+        <a class="country-notes-link" href="/profile" data-tooltip="Write an overview for your submissions by country" aria-label="Edit country notes — write an overview for your submissions by country">
+          <span>Edit country notes</span>
+          <span aria-hidden="true" style="color:var(--ink-faded);margin-left:6px;">→</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Loading state -->
+    <div id="my-loading" style="text-align:center;padding:40px;color:var(--ink-faded);">Loading...</div>
+
+    <!-- Error state -->
+    <div id="my-error" style="display:none;text-align:center;padding:40px;color:var(--feedback-red);"></div>
+
+    <!-- Results -->
+    <div id="my-results" style="display:none;"></div>
+
+    <!-- Pagination (shown only when total > PAGE_SIZE) -->
+    <div id="my-pager" style="display:none;justify-content:center;align-items:center;margin-top:16px;gap:8px;"></div>
+
+    <!-- Empty state -->
+    <div id="my-empty" style="display:none;text-align:center;padding:40px;color:var(--ink-faded);">
+      No submissions in this category yet.
+    </div>
+
+    <!-- Map view (all submissions) -->
+    <div id="my-map-wrap" style="display:none;">
+      <div id="my-map"></div>
+      <div id="my-map-empty" style="display:none;text-align:center;padding:40px;color:var(--ink-faded);">No submissions to map yet.</div>
+    </div>
+
+  </main>
+  </div>
+
+  <div id="login-gate" style="display:none;text-align:center;padding:60px 20px;">
+    <h2 style="font-family:var(--font-display);margin-bottom:12px;">Login Required</h2>
+    <p style="color:var(--ink-faded);margin-bottom:20px;">Please log in with Discord to view your submissions.</p>
+    <a href="/api/auth?action=login" class="form-submit" style="text-decoration:none;display:inline-block;">Login with Discord</a>
+  </div>
+
+  <script src="js/auth.js?v=12"></script>
+  <script src="js/utils.js?v=28"></script>
+  <script src="js/config.js?v=8"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.gridlayer.googlemutant@0.16.0/dist/Leaflet.GoogleMutant.js"></script>
+  <script src="js/basemap.js?v=3"></script>
+  <!-- 放大镜的开关逻辑，与 explore 共用同一份。必须在标记之后、页面主脚本之前：模块靠
+       querySelector 找 .search-chip，早于标记就是空转（且不报错）。 -->
+  <script src="js/search-chip.js?v=2"></script>
+  <script>
+    var submissionsCache = {};
+    var currentVisibility = 'active'; // 'active' | 'hidden' | 'trash'
+    var currentStatus = 'all';        // 'all' | 'pending' | 'approved' | 'rejected' (only for active)
+    var currentSort = 'newest';
+    var nameFilter = '';
+    var selectedCountry = null;
+    var currentPage = 1;
+    var PAGE_SIZE = 18;
+    var submissionsTotal = {};   // status -> total count (from server)
+
+    // View mode: 'list' (tabs + cards) or 'map' (single all-submissions map)
+    var currentView = 'list';
+    var myMap = null;           // Leaflet map instance (lazy-initialized)
+    var myMapLayers = null;     // L.LayerGroup holding all submission geometries
+    var myMapInitialized = false;
+    var myMapSubmissionLayers = []; // L.GeoJSON layers for rendered submissions (dot/pin refresh)
+    var mapExpandBtn = null;    // 地图放大按钮，initMap 里惰性创建
+
+    var ICON_EXPAND = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline><line x1="21" y1="3" x2="14" y2="10"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+    var ICON_SHRINK = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline><line x1="14" y1="10" x2="21" y2="3"></line><line x1="3" y1="21" x2="10" y2="14"></line></svg>';
+
+    // 放大 / 收回地图。放在顶层而不是 initMap 里：它不只是地图的事 —— 还要给 body 打
+    // is-map-large，配合 style.css 末尾那条规则放宽 <main> 的 max-width（地图是
+    // width:100%，只加高的话宽度被这一列卡死，就是「只有上下变宽」那个 bug）。
+    // 必须在地图可见时调用：invalidateSize() 读的是容器的 clientHeight，容器
+    // display:none 时读到 0，Leaflet 会把尺寸记成 0，再切回地图视图就是空白。
+    function setMapLarge(large) {
+      var wrap = document.getElementById('my-map-wrap');
+      if (wrap.classList.contains('is-large') === large) return; // 幂等，省掉多余的 invalidateSize
+      wrap.classList.toggle('is-large', large);
+      document.body.classList.toggle('is-map-large', large);
+      if (mapExpandBtn) {
+        var label = large ? 'Shrink map' : 'Enlarge map';
+        mapExpandBtn.innerHTML = large ? ICON_SHRINK : ICON_EXPAND;
+        mapExpandBtn.title = label;
+        mapExpandBtn.setAttribute('aria-label', label);
+        mapExpandBtn.setAttribute('aria-expanded', large ? 'true' : 'false');
+      }
+      // 容器尺寸变了，必须让 Leaflet 重算，否则瓦片仍按旧尺寸铺。
+      // #my-map 上没有 height 过渡，所以这里读到的就是最终值，无需等 transitionend。
+      if (myMap) myMap.invalidateSize();
+    }
+
+    // API status param — maps visibility + status to the backend value
+    function effectiveStatus() {
+      if (currentVisibility === 'hidden') return 'hidden';
+      if (currentVisibility === 'trash') return 'trash';
+      return currentStatus; // active → all / pending / approved / rejected
+    }
+    var pageNewIds = {}; // submission ids with "New" tags for this session
+    var _pageNewIdsReady = false; // true after notification fetch completes
+
+    function showToast(msg, linkText, linkAction) {
+      var toast = document.getElementById('toast');
+      if (linkText) {
+        toast.innerHTML = msg + ' <a href="#" class="toast__link">' + escapeHtml(linkText) + '</a>';
+        toast.querySelector('.toast__link').addEventListener('click', function(e) {
+          e.preventDefault();
+          clearTimeout(toast._timeout);
+          toast.classList.remove('toast--visible');
+          setTimeout(function() { toast.hidden = true; }, 300);
+          linkAction();
+        });
+      } else {
+        toast.textContent = msg;
+      }
+      toast.hidden = false;
+      toast.classList.add('toast--visible');
+      clearTimeout(toast._timeout);
+      toast._timeout = setTimeout(function() {
+        toast.classList.remove('toast--visible');
+        setTimeout(function() { toast.hidden = true; }, 300);
+      }, 4000);
+    }
+
+    // Custom confirm with Cancel as the visually emphasized (safer) default
+    function customConfirm(msg) {
+      return new Promise(function(resolve) {
+        var overlay = document.getElementById('confirm-overlay');
+        var msgEl = document.getElementById('confirm-msg');
+        var cancelBtn = document.getElementById('confirm-cancel-btn');
+        var okBtn = document.getElementById('confirm-ok-btn');
+        msgEl.textContent = msg;
+        overlay.hidden = false;
+        cancelBtn.focus();
+        function cleanup(result) {
+          overlay.hidden = true;
+          resolve(result);
+        }
+        cancelBtn.onclick = function() { cleanup(false); };
+        okBtn.onclick = function() { cleanup(true); };
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) cleanup(false);
+        });
+      });
+    }
+
+    function getCsrfToken() {
+      return window._csrfToken || '';
+    }
+
+    function cacheKey(status) {
+      return status;
+    }
+
+    // 列表请求的 URL 只在这一个地方拼。预取的缓存键就是它 —— 两处各拼一遍的话，
+    // 只要有一处多带/少带一个参数，预取就会永远命中不了，而且静默无效。
+    function listUrl(status, page, sort) {
+      return '/api/user-submissions?status=' + encodeURIComponent(status)
+        + '&sort=' + sort
+        + '&page=' + page
+        + '&pageSize=' + PAGE_SIZE
+        + (nameFilter ? '&q=' + encodeURIComponent(nameFilter) : '')
+        + (selectedCountry ? '&country=' + encodeURIComponent(selectedCountry) : '');
+    }
+
+    // 服务端来的数字字段统一成 Number，避免 '0' / 0 两种形态在比较里翻车。
+    function normalizeRows(list) {
+      return (list || []).map(function(obj) {
+        return Object.assign({}, obj, {
+          is_hidden: Number(obj.is_hidden) || 0,
+          is_deleted: Number(obj.is_deleted) || 0,
+          deleted_at: obj.deleted_at || ''
+        });
+      });
+    }
+
+    // 排序键的两个方向各自的「第 1 页」都存这里，键就是 listUrl() 的输出。
+    // 点排序键时先看这里：已就绪 → 直接渲染（零延迟）；在飞 → 等它。
+    //
+    // 为什么只存「第 1 页」：点排序键本来就会把页码重置回 1（见下面的 handler），只需要这一页。
+    // 为什么不失效：键里带着 status / sort / q / country 这些筛选条件，筛选一变键就变了，
+    // 旧条目永远不会被误命中 —— 不需要额外的失效逻辑（clearPage1Cache 只是免得只增不减）。
+    //
+    // ⚠️ 这里**不能**退回成「一个方向的单槽」。槽位只有「空 / 已就绪」两态时，请求在飞的整段
+    // 窗口里它都读作空，于是点击掉到第 3 档 loadTab —— 而 loadTab 进门就 `results.display='none'`
+    // 并显示 "Loading..."，白屏就是这么来的。而且 miss 一次要 2×RTT 才恢复（loadTab 自己一个往返，
+    // 它触发的预取再一个），人点得比这快就永远回不到快路径。实测往返 400ms 时：间隔 500ms 以上
+    // 全程无白屏，间隔 300ms 起每次都白屏。
+    // 现在条目在**发请求那一刻**就占住并带上 promise，两个方向各自常驻。
+    //
+    // 用 Object.create(null)：键是拼进了用户可控字符串（q / country）的 URL。
+    var _page1 = Object.create(null);
+
+    // 取该 url 的第 1 页；已在飞或已就绪就不再发第二个请求。
+    function fetchPage1(url) {
+      var entry = _page1[url];
+      if (entry) return entry.promise;
+      entry = _page1[url] = { promise: null, data: null };
+      entry.promise = fetch(url)
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(d) { if (d) entry.data = d; return d; })
+        .catch(function() { return null; });   // 预取失败无所谓：点击时回落到正常重取
+      return entry.promise;
+    }
+
+    // 筛选条件换了，旧键全部作废。纯粹是卫生问题，不清也不会误命中。
+    function clearPage1Cache() {
+      _page1 = Object.create(null);
+    }
+
+    // 把另一种排序方向的第 1 页备好，让下次点排序键是瞬时的。
+    function prefetchAltSort(status) {
+      // 一页装得下时走本地反转，连请求都不发，没必要预取。
+      if ((submissionsTotal[cacheKey(status)] || 0) <= PAGE_SIZE) return;
+      fetchPage1(listUrl(status, 1, currentSort === 'newest' ? 'oldest' : 'newest'));
+    }
+
+    // 把一页结果铺进当前 tab 的缓存并渲染。命中缓存与「等在飞的预取」两条路都走它。
+    function applyPage1(eff, d) {
+      currentPage = 1;
+      submissionsCache[cacheKey(eff)] = normalizeRows(d.submissions);
+      submissionsTotal[cacheKey(eff)] = (d.total != null)
+        ? Number(d.total)
+        : submissionsCache[cacheKey(eff)].length;
+      renderFromCache();
+    }
+
+    function switchVisibility(vis) {
+      currentVisibility = vis;
+      currentPage = 1;
+      // Highlight active visibility tab
+      document.querySelectorAll('#visibility-tabs .review-tab').forEach(function(t) {
+        t.classList.toggle('is-active', t.dataset.visibility === vis);
+      });
+      // Show/hide status row
+      var statusRow = document.getElementById('status-tabs');
+      if (statusRow) statusRow.style.display = (vis === 'active') ? '' : 'none';
+      // 这一块的底边换人了：status 行藏起来时由 visibility 行收底，下角要跟着圆起来。
+      // 圆角规则读这个类，见 style.css「My Submissions 筛选键」。
+      document.body.classList.toggle('is-status-hidden', vis !== 'active');
+      reloadList(effectiveStatus());
+    }
+
+    function switchStatus(st) {
+      currentStatus = st;
+      currentPage = 1;
+      // Highlight active status tab
+      document.querySelectorAll('#status-tabs .review-tab').forEach(function(t) {
+        t.classList.toggle('is-active', t.dataset.status === st);
+      });
+      reloadList(effectiveStatus());
+    }
+
+    // 国家菜单与列表**并行**取 —— 原来三处都写成 `buildCountryFilter(eff).then(loadTab)`，
+    // 列表在等一个它根本不需要的请求，首屏因此被整整拖后一轮。而且 `#country-filter` 的静态标记
+    // 就是 hidden、要等这次 fetch 回来才现身，所以 "All Countries" 必然比同行其它控件晚一拍。
+    //
+    // 唯一必须保序的情形：**已经选了某个国家**时。buildCountryFilter 会发现那个国家在新 tab 里
+    // 不存在并把它清成 null，而 loadTab 正是按 selectedCountry 拼查询串的 —— 抢先发出去就会拿一个
+    // 已经不存在的国家去查，拿到 0 条、页面停在空状态，而之后没有任何东西会重跑。所以那种情况仍然等它。
+    function reloadList(eff) {
+      clearPage1Cache();   // 筛选条件换了，旧键全作废（不清也不会误命中，纯粹免得只增不减）
+      var pending = buildCountryFilter(eff);
+      if (selectedCountry) pending.then(function() { loadTab(eff, 1); });
+      else loadTab(eff, 1);
+    }
+
+    function goActiveAll() {
+      currentStatus = 'all';
+      switchVisibility('active');
+    }
+
+    // Remove item from all cached tabs, optionally add it to a target tab's cache
+    function moveInCache(item, targetStatus) {
+      Object.keys(submissionsCache).forEach(function(k) {
+        if (submissionsCache[k]) {
+          submissionsCache[k] = submissionsCache[k].filter(function(x) { return x.id !== item.id; });
+        }
+      });
+      if (targetStatus) {
+        var key = cacheKey(targetStatus);
+        if (!submissionsCache[key]) submissionsCache[key] = [];
+        submissionsCache[key].push(item);
+      }
+      renderFromCache();
+    }
+
+    // Country filter dropdown toggle
+    (function() {
+      var filter = document.getElementById('country-filter');
+      var btn = document.getElementById('country-filter-btn');
+      var menu = document.getElementById('country-filter-menu');
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        filter.classList.toggle('is-open');
+      });
+      document.addEventListener('click', function() {
+        filter.classList.remove('is-open');
+      });
+    })();
+
+    // Wait for auth to be ready
+    window._authReady.then(function(user) {
+      if (!user) {
+        document.getElementById('my-submissions-content').style.display = 'none';
+        document.getElementById('login-gate').style.display = 'block';
+        return;
+      }
+      document.getElementById('my-submissions-content').style.display = 'block';
+
+      // Load submissions immediately — don't block on notifications
+      reloadList('all');
+
+      // Fetch notifications in background for badge + "New" tags
+      fetch('/api/user-submissions?action=notifications')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          (data.items || []).forEach(function(item) {
+            pageNewIds[item.submission_id] = item.type || 'status_change';
+          });
+          _pageNewIdsReady = true;
+          // Re-render cards so "New" tags appear
+          if (submissionsCache[cacheKey(effectiveStatus())]) renderFromCache();
+          // Mark as read (fire-and-forget)
+          return fetch('/api/user-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': window._csrfToken || '' },
+            body: JSON.stringify({ action: 'mark-read' })
+          });
+        })
+        .then(function() {
+          var badge = document.getElementById('nav-notification-badge');
+          if (badge) { badge.style.display = 'none'; }
+        })
+        .catch(function() { /* best-effort */ });
+    });
+
+    // Visibility tab clicks
+    document.querySelectorAll('#visibility-tabs .review-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        if (tab.dataset.visibility === currentVisibility) return;
+        switchVisibility(tab.dataset.visibility);
+      });
+    });
+    // Status tab clicks
+    document.querySelectorAll('#status-tabs .review-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        if (tab.dataset.status === currentStatus) return;
+        switchStatus(tab.dataset.status);
+      });
+    });
+    // View mode toggle clicks
+    document.querySelectorAll('#view-tabs .review-tab').forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        if (tab.dataset.view === currentView) return;
+        switchView(tab.dataset.view);
+      });
+    });
+
+    // Sort toggle — 三档，由快到慢：
+    //   1. 一页装得下 → 本地反转，不发请求。
+    //   2. 这个方向的第 1 页已在 _page1 里 → 已就绪就直接渲染（零延迟）；
+    //      在飞就等它 —— 等的那段时间旧行留在原地，**不白屏**。
+    //   3. 这个方向从没取过 → 回页 1 重取（loadTab 会藏列表、显示 "Loading..."）。
+    // 第 2 档是 2026-09-28 加的，见 _page1 上面那段注释：原来只有 1 和 3，而那趟往返在观感上
+    // 就是一秒白屏；更要命的是只要点得比一个往返快就永远跳不过它。
+    document.getElementById('sort-toggle').addEventListener('click', function() {
+      var eff = effectiveStatus();
+      // 先算切换后的方向：下面的 URL 必须按新排序拼，否则永远匹配不上 _page1 的键。
+      var nextSort = currentSort === 'newest' ? 'oldest' : 'newest';
+      var url = listUrl(eff, 1, nextSort);
+
+      currentSort = nextSort;
+      this.textContent = currentSort === 'newest' ? 'Newest first ▾' : 'Oldest first ▾';
+
+      var items = submissionsCache[cacheKey(eff)] || [];
+      var total = submissionsTotal[cacheKey(eff)] != null ? submissionsTotal[cacheKey(eff)] : items.length;
+
+      if (total <= PAGE_SIZE) {
+        items.reverse();
+        submissionsCache[cacheKey(eff)] = items;
+        renderFromCache();
+        return;
+      }
+
+      var entry = _page1[url];
+      if (entry && entry.data) {
+        applyPage1(eff, entry.data);
+        prefetchAltSort(eff);            // 立刻为反方向补一次，来回切换都保持瞬时
+        return;
+      }
+
+      if (entry) {
+        // 预取还在飞。等它，别掉到第 3 档 —— 那会把列表整块藏掉，正是要治的白屏。
+        // 等回来时若用户又点了一下（currentSort 已经变了），这一份就作废：否则会用旧方向的
+        // 数据盖掉新方向刚渲染好的列表。
+        entry.promise.then(function(d) {
+          if (!d || currentSort !== nextSort) return;
+          applyPage1(eff, d);
+          prefetchAltSort(eff);
+        });
+        return;
+      }
+
+      currentPage = 1;
+      loadTab(eff, 1);
+    });
+
+    // Name search — debounced server-side refetch
+    var nameSearchTimer = null;
+    document.getElementById('name-search').addEventListener('input', function() {
+      clearTimeout(nameSearchTimer);
+      var self = this;
+      nameSearchTimer = setTimeout(function() {
+        nameFilter = self.value.trim();
+        clearPage1Cache();   // q 变了，旧键全作废（理由同 reloadList）
+        currentPage = 1;
+        loadTab(effectiveStatus(), 1);
+      }, 250);
+    });
+
+    function buildCountryFilter(forStatus) {
+      var eff = forStatus || effectiveStatus();
+      return fetch('/api/user-submissions?action=countries&status=' + encodeURIComponent(eff))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          var cids = (data.countries || []);
+          // Reset selected country if it no longer exists in this tab
+          if (selectedCountry && cids.indexOf(selectedCountry) === -1) {
+            selectedCountry = null;
+          }
+          var filter = document.getElementById('country-filter');
+          if (cids.length <= 1) {
+            filter.hidden = true;
+            return;
+          }
+          cids.sort();
+
+          var btn = document.getElementById('country-filter-btn');
+          btn.childNodes[0].textContent = selectedCountry ? (countryNames[selectedCountry] || selectedCountry) : 'All Countries';
+
+          var menu = document.getElementById('country-filter-menu');
+          menu.innerHTML = '';
+
+          var allItem = document.createElement('div');
+          allItem.className = 'country-filter__item' + (selectedCountry ? '' : ' is-selected');
+          allItem.textContent = 'All Countries';
+          allItem.addEventListener('click', function() {
+            selectedCountry = null;
+            updateFilterUI();
+            currentPage = 1;
+            loadTab(effectiveStatus(), 1);
+            filter.classList.remove('is-open');
+          });
+          menu.appendChild(allItem);
+
+          cids.forEach(function(cid) {
+            var item = document.createElement('div');
+            item.className = 'country-filter__item' + (selectedCountry === cid ? ' is-selected' : '');
+            item.textContent = countryNames[cid] || cid;
+            item.dataset.country = cid;
+            item.addEventListener('click', function() {
+              selectedCountry = cid;
+              updateFilterUI();
+              clearPage1Cache();   // country 变了，旧键全作废（理由同 reloadList）
+              currentPage = 1;
+              loadTab(effectiveStatus(), 1);
+              filter.classList.remove('is-open');
+            });
+            menu.appendChild(item);
+          });
+
+          filter.hidden = false;
+        })
+        .catch(function() { /* best-effort: leave filter hidden */ });
+    }
+
+    function updateFilterUI() {
+      var btn = document.getElementById('country-filter-btn');
+      btn.childNodes[0].textContent = selectedCountry ? (countryNames[selectedCountry] || selectedCountry) : 'All Countries';
+
+      document.querySelectorAll('.country-filter__item').forEach(function(item) {
+        if (selectedCountry && item.dataset.country === selectedCountry) {
+          item.classList.add('is-selected');
+        } else if (!selectedCountry && item.dataset.country === undefined) {
+          item.classList.add('is-selected');
+        } else {
+          item.classList.remove('is-selected');
+        }
+      });
+    }
+
+    function loadTab(status, page) {
+      var pageNum = page || 1;
+      currentPage = pageNum;
+      var loading = document.getElementById('my-loading');
+      var results = document.getElementById('my-results');
+      var empty = document.getElementById('my-empty');
+      var error = document.getElementById('my-error');
+
+      loading.style.display = 'block';
+      results.style.display = 'none';
+      empty.style.display = 'none';
+      error.style.display = 'none';
+      // Hide the pager while (re)loading so "Page X of Y" + prev/next only reappear with fresh data
+      var pager = document.getElementById('my-pager');
+      if (pager) pager.style.display = 'none';
+
+      fetch(listUrl(status, pageNum, currentSort))
+        .then(function(r) {
+          if (r.status === 401) {
+            document.getElementById('my-submissions-content').style.display = 'none';
+            document.getElementById('login-gate').style.display = 'block';
+            throw new Error('auth');
+          }
+          if (!r.ok) {
+            return r.json().then(function(body) {
+              throw new Error(body.error || 'Server error: ' + r.status);
+            });
+          }
+          return r.json();
+        })
+        .then(function(data) {
+          loading.style.display = 'none';
+          submissionsCache[cacheKey(status)] = normalizeRows(data && data.submissions);
+          submissionsTotal[cacheKey(status)] = (data && data.total != null)
+            ? Number(data.total)
+            : submissionsCache[cacheKey(status)].length;
+          // 顺手把另一种排序方向的第 1 页取回来，让下次点排序键是瞬时的。
+          prefetchAltSort(status);
+          // When loading All tab, also fetch pending in background so draft-detection works
+          if (status === 'all' && !submissionsCache[cacheKey('pending')]) {
+            fetch('/api/user-submissions?status=pending&sort=' + currentSort + '&page=1&pageSize=1000')
+              .then(function(r) { return r.json(); })
+              .then(function(d) {
+                submissionsCache[cacheKey('pending')] = (d && d.submissions) ? d.submissions.map(function(obj) {
+                return Object.assign({}, obj, {
+                  is_hidden: Number(obj.is_hidden) || 0,
+                  is_deleted: Number(obj.is_deleted) || 0,
+                  deleted_at: obj.deleted_at || ''
+                });
+              }) : [];
+                submissionsTotal[cacheKey('pending')] = (d && d.total != null) ? Number(d.total) : 0;
+              })
+              .catch(function() { /* best-effort, draft badge may not show */ });
+          }
+          renderFromCache();
+        })
+        .catch(function(err) {
+          if (err.message === 'auth') return;
+          loading.style.display = 'none';
+          if (currentView !== 'list') return;
+          error.style.display = 'block';
+          error.textContent = 'Failed to load submissions: ' + escapeHtml(err.message);
+        });
+    }
+
+    function renderPager() {
+      var pager = document.getElementById('my-pager');
+      if (!pager) return;
+      var eff = effectiveStatus();
+      var total = submissionsTotal[cacheKey(eff)] || 0;
+      var pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+      if (pages <= 1) {
+        pager.style.display = 'none';
+        pager.innerHTML = '';
+        return;
+      }
+      pager.style.display = 'flex';
+      pager.innerHTML = '';
+
+      if (currentPage > 1) {
+        var prev = document.createElement('button');
+        prev.className = 'my-pager-btn';
+        prev.textContent = '‹ Prev';
+        prev.addEventListener('click', function() { loadTab(eff, currentPage - 1); });
+        pager.appendChild(prev);
+      }
+
+      var info = document.createElement('span');
+      info.textContent = 'Page ' + currentPage + ' of ' + pages;
+      info.style.cssText = 'font-size:13px;color:var(--ink-faded);';
+      pager.appendChild(info);
+
+      if (currentPage < pages) {
+        var next = document.createElement('button');
+        next.className = 'my-pager-btn';
+        next.textContent = 'Next ›';
+        next.addEventListener('click', function() { loadTab(eff, currentPage + 1); });
+        pager.appendChild(next);
+      }
+    }
+
+    function renderFromCache() {
+      if (currentView !== 'list') return;
+      // 整块重建会把触发按钮连同它所在的卡片一起换掉，菜单却还挂在 body 上 ——
+      // 不关掉就成了一个悬空的、指向已消失卡片的浮层。
+      closeDownloadMenu();
+      var results = document.getElementById('my-results');
+      var empty = document.getElementById('my-empty');
+
+      renderPager();
+
+      var items = submissionsCache[cacheKey(effectiveStatus())] || [];
+
+      // Trash tab: restore-all button
+      if (currentVisibility === 'trash' && items.length > 0) {
+        var trashBar = document.createElement('div');
+        trashBar.className = 'trash-bar';
+        trashBar.style.cssText = 'display:flex;align-items:center;padding:8px 0;margin-bottom:12px;';
+
+        var restoreAllBtn = document.createElement('button');
+        restoreAllBtn.className = 'modal-btn modal-btn--primary';
+        restoreAllBtn.textContent = 'Restore All';
+        restoreAllBtn.addEventListener('click', function() {
+          fetch('/api/user-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+            body: JSON.stringify({ action: 'restore-all' })
+          }).then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.success) {
+                showToast('All items restored from Trash.', 'View', function() { goActiveAll(); });
+                Object.keys(submissionsCache).forEach(function(k) { delete submissionsCache[k]; });
+                loadTab(effectiveStatus());
+              }
+            }).catch(function() {});
+        });
+
+        trashBar.appendChild(restoreAllBtn);
+        results.appendChild(trashBar);
+      }
+
+      if (items.length === 0) {
+        results.style.display = 'none';
+        empty.style.display = 'block';
+        if (nameFilter) {
+          empty.textContent = 'No submissions matching "' + nameFilter + '".';
+        } else if (selectedCountry) {
+          empty.textContent = 'No submissions in this category for ' + (countryNames[selectedCountry] || selectedCountry) + '.';
+        } else {
+          empty.textContent = 'No submissions in this category yet.';
+        }
+        return;
+      }
+
+      empty.style.display = 'none';
+      results.style.display = '';
+      results.innerHTML = '';
+
+      items.forEach(function(s) {
+        if (currentVisibility === 'trash') {
+          var item = createTrashCard(s);
+        } else if (currentVisibility === 'hidden') {
+          var item = createHiddenCard(s);
+        } else {
+          var item = createSubmissionCard(s);
+        }
+        results.appendChild(item);
+      });
+
+      // 标签裁剪依赖布局结果，所以只能等卡片都进 DOM 之后统一跑一遍
+      // （不是每建一张跑一次 —— 那会在每张卡上触发一次重排）。
+      trimAllTagRows();
+    }
+
+    // ===== 标签裁剪：放不下就丢，且要丢**整颗** =====
+    // 纯 CSS 做不到：flex 容器 overflow:hidden 只会裁出半颗标签，比不放还难看，
+    // 而且「半颗」在视觉上会被读成一个完整的短标签。按数量截断（:nth-child）
+    // 也不是这个需求 —— 那是「最多 N 个」，不是「放得下就放」。
+    // 所以渲染完成后按几何量测，把右边缘超出容器的标签整颗移除。
+    function trimTagRow(line2) {
+      var tags = line2.querySelector('.review-item__tags');
+      if (!tags || !tags._all) return;
+      // 先按数据重建 —— 否则「缩窄 → 丢标签 → 再拉宽」之后标签回不来。
+      tags.textContent = '';
+      tags._all.forEach(function(n) { tags.appendChild(makeTagEl(n)); });
+
+      var limit = tags.getBoundingClientRect().right;
+      if (!limit) return;   // 容器不可见时 rect 全 0，会把标签全丢光
+      var kids = tags.children, kill = [];
+      for (var i = 0; i < kids.length; i++) {
+        // getBoundingClientRect 不受祖先 overflow 裁剪影响 —— 溢出到右边的标签
+        // 报的是它的自然位置，正是要跟 limit 比的那个数。
+        if (kids[i].getBoundingClientRect().right > limit + 0.5) kill.push(kids[i]);
+      }
+      // 读全部做完再写：循环里一边读一边移除会每轮触发一次重排。
+      kill.forEach(function(el) { el.remove(); });
+    }
+
+    function trimAllTagRows() {
+      var results = document.getElementById('my-results');
+      if (!results) return;
+      // 容器不可见（display:none）时所有 rect 都是 0 —— 那种情况下裁剪会把标签
+      // **全丢光**。渲染前 results.style.display = '' 那条必须保持，这道闸是它的兜底。
+      if (results.getBoundingClientRect().width === 0) return;
+      var lines = results.querySelectorAll('.review-item__line2');
+      for (var i = 0; i < lines.length; i++) trimTagRow(lines[i]);
+    }
+
+    // 窗口变窄/变宽都可能改变「放得下几个标签」，防抖重排一次。
+    var tagTrimTimer = null;
+    window.addEventListener('resize', function() {
+      clearTimeout(tagTrimTimer);
+      tagTrimTimer = setTimeout(trimAllTagRows, 150);
+    });
+
+    // 国旗数据是异步到的（utils.js 的 /api/countries），在此之前渲染的卡片只有国家名。
+    // 数据一到就整列表重渲染一遍 —— renderFromCache 从缓存重建，顺带把国旗和标签
+    // 裁剪一起做对，不需要单独写「补旗」逻辑。一页只来一次，18 张卡可以接受。
+    window.addEventListener('countries-ready', function() {
+      if (currentView !== 'list') return;
+      // 这个 tab 还没取过数就什么都别做：否则会把「还没加载完」误判成
+      // 「这个分类下没有提交」，闪一下空态（同样的守卫在 _authReady 之后那处已有先例）。
+      if (!submissionsCache[cacheKey(effectiveStatus())]) return;
+      renderFromCache();
+    });
+
+    // 来源标注徽章 —— 三个卡片构造函数（active / hidden / trash）共用。
+    // 用 DOM append 而不是拼字符串：徽章的 href 来自提交内容，不能进 innerHTML。
+    // 未标注时不渲染，不留空位。
+    function appendSourceBadge(infoEl, s) {
+      var badge = buildSourceBadge(s.source_type, s.source_url);
+      if (!badge) return;
+      var wrap = document.createElement('div');
+      wrap.style.marginBottom = '4px';
+      wrap.appendChild(badge);
+      infoEl.appendChild(wrap);
+    }
+
+    // 两种下载格式的全部差异都在这张表里。**只写差异**，流程（fetch → 取消语义 →
+    // picker 兑底）两种格式共用一份 —— 见 downloadSubmission。
+    //
+    // full 的 query 留空：服务端 `format` 省略时默认就是 'full'。多传一个
+    // `&format=full` 只会让 URL 更长，还让「默认值可信」这条契约少一个消费者。
+    var DOWNLOAD_FORMATS = {
+      // 完整导出：13 键信封（内容 + 地理 + 出处 + 元信息）。
+      full: {
+        query: '',
+        ext: '.json',
+        mime: 'application/json',
+        pickerDesc: 'JSON',
+        pickerAccept: { 'application/json': ['.json'] }
+      },
+      // 简易下载：**裸 geometry**，扩展名与 MIME 都按 GeoJSON 走。
+      geojson: {
+        query: '&format=geojson',
+        ext: '.geojson',
+        mime: 'application/geo+json',
+        pickerDesc: 'GeoJSON',
+        pickerAccept: { 'application/geo+json': ['.geojson'] }
+      }
+    };
+
+    // 文件名：geoguide_<提交名><扩展名>。剔控制字符 → 路径分隔符与 `..` 换掉 →
+    // 空白折叠 → 截断。中文不转写，原样保留。
+    function exportFilename(name, ext) {
+      var slug = String(name || '')
+        .replace(/[\u0000-\u001f\u007f]/g, '')
+        .replace(/[/\\]/g, '-')
+        .replace(/\.\./g, '-')
+        .replace(/\s+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60);
+      return 'geoguide_' + (slug || 'submission') + (ext || '.json');
+    }
+
+    function saveViaAnchor(text, filename, mime) {
+      var blob = new Blob([text], { type: mime || 'application/json' });
+      var href = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);   // 漏了会一直占内存
+    }
+
+    // format: 'full'（默认）| 'geojson'。两者**只差这三个值**（URL 尾巴 / 扩展名 /
+    // MIME 与 picker 的 accept），下面整段流程共用。
+    function downloadSubmission(id, name, format) {
+      var fmt = DOWNLOAD_FORMATS[format] || DOWNLOAD_FORMATS.full;
+      fetch('/api/user-submissions?action=export&id=' + encodeURIComponent(id) + fmt.query)
+        .then(function(r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.json();
+        })
+        .then(function(data) {
+          var text = JSON.stringify(data, null, 2);
+          var filename = exportFilename(name, fmt.ext);
+
+          // Chromium-only：真正的系统「另存为」，用户自己挑文件夹。
+          // Firefox / Safari 没有这个 API，直接落到 <a download>。
+          //
+          // 顺序有讲究：picker 需要「瞬时用户激活」（点完约 5 秒内）。先 fetch 仍在这个
+          // 窗口内 —— 同源小请求，几百毫秒。反过来先弹窗的话，一旦 fetch 失败，用户已经
+          // 挑好了位置却只得到一个空文件。
+          if (!window.showSaveFilePicker) {
+            saveViaAnchor(text, filename, fmt.mime);
+            return;
+          }
+          window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description: fmt.pickerDesc, accept: fmt.pickerAccept }]
+          }).then(function(handle) {
+            return handle.createWritable().then(function(w) {
+              return w.write(text).then(function() { return w.close(); });
+            });
+          }).catch(function(err) {
+            // AbortError = 用户按了取消。那不是失败，而且**绝不能**顺势退回普通下载 ——
+            // 那等于照存不误，跟「取消」的意思正好相反。
+            if (err && err.name === 'AbortError') return;
+            saveViaAnchor(text, filename, fmt.mime);   // picker 被策略挡掉等
+          });
+        })
+        .catch(function() {
+          showToast('Could not download this submission.');
+        });
+    }
+
+    // ===== 下载选项菜单（Full JSON / GeoJSON only）=====
+    // 2026-10-02 用户要求「加一个选项」，并选了「点下载图标弹菜单」这一种。
+    //
+    // ⚠️ 菜单**不能**放在卡片里：`#my-submissions-content .review-item` 是
+    // `overflow: hidden`（右上角三角能贴着圆角被裁掉的前提），浮层会被裁掉半截。
+    // 所以菜单挂在 `document.body` 上 + `position: fixed`，位置由触发按钮的
+    // getBoundingClientRect 算出来 —— 与 contributors.js 的贡献者面板同一套做法。
+    // fixed 逃得掉 overflow 的前提是**祖先链上没有 transform/filter/will-change**
+    // （有的话那个祖先会成为包含块，照样裁）。已逐条核对 style.css 的
+    // body/html/.review-item/#my-results/#my-submissions-content，都没有。
+    //
+    // 用单例而不是每张卡一个：列表每次渲染都是整块重建，逐卡挂 DOM 意味着每轮渲染
+    // 都要新建 + 回收，还得多挂 N 条 document 监听。单例只要一套。
+    var _downloadMenuEl = null;
+    var _downloadMenuTrigger = null;   // 当前打开的触发按钮（用来收 aria-expanded / 还焦点）
+    var _downloadMenuTarget = null;    // { id, name }，从触发按钮上带过来
+
+    var DOWNLOAD_MENU_ITEMS = [
+      { label: 'Full JSON', format: 'full' },
+      { label: 'GeoJSON only', format: 'geojson' }
+    ];
+
+    function buildDownloadMenu() {
+      var menu = document.createElement('div');
+      menu.className = 'download-menu';
+      menu.hidden = true;
+      menu.setAttribute('role', 'menu');
+      menu.setAttribute('aria-label', 'Download options');
+
+      DOWNLOAD_MENU_ITEMS.forEach(function(opt) {
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.className = 'download-menu__item';
+        item.setAttribute('role', 'menuitem');
+        item.textContent = opt.label;
+        item.addEventListener('click', function() {
+          // 先取出来再关：closeDownloadMenu 会清掉 _downloadMenuTarget。
+          var target = _downloadMenuTarget;
+          closeDownloadMenu();
+          if (target) downloadSubmission(target.id, target.name, opt.format);
+        });
+        menu.appendChild(item);
+      });
+
+      // role="menu" 就欠着上下键这套键盘契约，不能不还（Escape 在 document 上统一处理）。
+      // Tab 不吞：只收起，让焦点照常往下走。
+      menu.addEventListener('keydown', function(e) {
+        var items = Array.prototype.slice.call(menu.querySelectorAll('.download-menu__item'));
+        var i = items.indexOf(document.activeElement);
+        var next = null;
+        if (e.key === 'ArrowDown') next = items[(i + 1) % items.length];
+        else if (e.key === 'ArrowUp') next = items[(i - 1 + items.length) % items.length];
+        else if (e.key === 'Home') next = items[0];
+        else if (e.key === 'End') next = items[items.length - 1];
+        if (next) { e.preventDefault(); next.focus(); }
+      });
+
+      document.body.appendChild(menu);
+      return menu;
+    }
+
+    // 位置：**优先向上开**。动作行贴着卡片底边，往下开必然压在下一排卡片上、
+    // 或者在末排直接顶出视口。上面塞不下才翻到下面。
+    // 右边缘对齐按钮右边缘（按钮就在卡片右下角），再夹回视口内。
+    function positionDownloadMenu(btn) {
+      var r = btn.getBoundingClientRect();
+      var mh = _downloadMenuEl.offsetHeight;
+      var mw = _downloadMenuEl.offsetWidth;
+      var GAP = 6;
+      var top = r.top - GAP - mh;
+      if (top < 8) top = Math.min(r.bottom + GAP, window.innerHeight - mh - 8);
+      var left = Math.max(8, Math.min(r.right - mw, window.innerWidth - mw - 8));
+      _downloadMenuEl.style.top = Math.max(8, top) + 'px';
+      _downloadMenuEl.style.left = left + 'px';
+    }
+
+    function openDownloadMenu(btn, target) {
+      if (!_downloadMenuEl) _downloadMenuEl = buildDownloadMenu();
+      if (_downloadMenuTrigger) _downloadMenuTrigger.setAttribute('aria-expanded', 'false');
+      _downloadMenuTrigger = btn;
+      _downloadMenuTarget = target;
+      btn.setAttribute('aria-expanded', 'true');
+      // 先现身再量高：offsetHeight 对 display:none 恒为 0，位置会算飞。同一轮任务里
+      // 浏览器不会中途绘制，所以不存在「先在 0,0 闪一下」。
+      _downloadMenuEl.hidden = false;
+      positionDownloadMenu(btn);
+      var first = _downloadMenuEl.querySelector('.download-menu__item');
+      if (first) first.focus();
+    }
+
+    function closeDownloadMenu() {
+      if (!_downloadMenuEl || _downloadMenuEl.hidden) return;
+      _downloadMenuEl.hidden = true;
+      var wasInMenu = _downloadMenuEl.contains(document.activeElement);
+      if (_downloadMenuTrigger) {
+        _downloadMenuTrigger.setAttribute('aria-expanded', 'false');
+        // 焦点还回触发按钮，否则会掉到 body 上，键盘用户直接丢失位置。
+        // 只在焦点确实在菜单里时才还 —— 点外部关闭时焦点该跟着点到的地方走。
+        if (wasInMenu) _downloadMenuTrigger.focus();
+      }
+      _downloadMenuTrigger = null;
+      _downloadMenuTarget = null;
+    }
+
+    function toggleDownloadMenu(btn, target) {
+      if (_downloadMenuTrigger === btn && _downloadMenuEl && !_downloadMenuEl.hidden) {
+        closeDownloadMenu();     // 再点一次 = 收起，与放大镜、国家筛选同一套开关语义
+        return;
+      }
+      openDownloadMenu(btn, target);
+    }
+
+    // 点外部收起。触发按钮那条**不靠 stopPropagation**（虽然调用方确实 stop 了）——
+    // 显式比对触发按钮，免得将来有人挪走那个 stopPropagation 就静默失效。
+    document.addEventListener('click', function(e) {
+      if (_downloadMenuEl && _downloadMenuEl.contains(e.target)) return;
+      if (_downloadMenuTrigger && _downloadMenuTrigger.contains(e.target)) return;
+      closeDownloadMenu();
+    });
+
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') closeDownloadMenu();
+    });
+
+    // position: fixed 不跟着滚动走 —— 不关掉的话菜单会钉在原地、与触发按钮分家。
+    // capture: true 才吃得到内层滚动容器（列表自己滚的情况）。
+    window.addEventListener('scroll', closeDownloadMenu, true);
+    window.addEventListener('resize', closeDownloadMenu);
+
+    // ===== 卡片图标 =====
+    // 六个字形的 path 在 `js/utils.js` 的 `GEOGUIDE_ICONS` —— **唯一来源**。
+    // 弹窗的 Edit 按钮要用**同一支笔**（用户要求「和 my submissions 一样的图案」），
+    // 抄一份 path 到这里就是第二个同步点。
+    // 本文件只留两样：无障碍文案，以及只在本页出现的那个「有 detailed description」
+    // 字形（笔法共享靠 geoguideIconSvg，页内独有的造型不必进共享表）。
+    var ICON_LABELS = {
+      edit: 'Edit',
+      hide: 'Hide',
+      unhide: 'Unhide',
+      delete: 'Delete',
+      restore: 'Restore',
+      share: 'Share link',
+      // 这个图标现在**不直接下载**了，而是开一个「Full JSON / GeoJSON only」的菜单，
+      // 所以文案从 'Download as JSON' 改成 'Download options' —— 名字与实际行为对不上
+      // 是 2.5.3（Label in Name）那一类问题的近亲。
+      download: 'Download options'
+    };
+
+    // 「有 detailed description」那一行的小图标。design.md §8 给的六个字形里没有它
+    //（第六个是 download 的箭头，语义对不上；预览页当时临时借了它）。这里补一张折角纸页，
+    // 笔法与其余六个一致 —— 与「有正文」这件事对得上，也仍然是页内唯一这个形状。
+    var ICON_DETAIL = '<path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/><path d="M9.2 12.6h5.6M9.2 16h3.6"/>';
+
+    // 动作行的图标键。32px 命中区（--compact 档：桌面 32px / 粗指针 44px，见
+    // .trellis/spec/frontend/touch-targets.md）、18px 字形、无底无框、颜色只在 hover
+    // 时出现 —— 与放大镜、旧下载图标同一族。**不要自己发明伪元素命中区**：
+    // 「命中区解耦」在 touch-targets.md 里是明确的暂缓项，分档表就是既有答案。
+    function makeIconButton(kind, s) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'review-item__icon review-item__icon--' + kind;
+      var label = ICON_LABELS[kind] || kind;
+      btn.title = label;
+      btn.setAttribute('aria-label', label + ': ' + (s.name || 'this submission'));
+      btn.innerHTML = geoguideIconSvg(kind);
+      return btn;
+    }
+
+    // 下载图标是**菜单触发器**，不是普通动作按钮。aria-haspopup/aria-expanded 由
+    // open/closeDownloadMenu 成对维护 —— 只在 makeIconButton 里写死 aria-expanded="false"
+    // 而没人翻它，读屏器会永远以为它是收起的。
+    function makeDownloadButton(s) {
+      var btn = makeIconButton('download', s);
+      btn.setAttribute('aria-haspopup', 'menu');
+      btn.setAttribute('aria-expanded', 'false');
+      return btn;
+    }
+
+    // ===== 卡片行构建：三个 tab 共用同一套行结构 =====
+    // 差别只在哪几行出现，不是三份各写一遍（design.md §2）。
+
+    // 右上角的实心三角。颜色由卡片上的 --status 供（CSS 一条规则吃遍四种状态）。
+    function makeStatusTriangle(label) {
+      var tri = document.createElement('span');
+      tri.className = 'review-item__status';
+      // role="img" 不能少：没有 role 的元素上挂 aria-label 是**无效标注**，
+      // 读屏器不保证会念它。三角没有可见文字，WCAG 1.4.1（不能只用颜色传达信息）
+      // 就靠这一行 + title 满足。
+      tri.setAttribute('role', 'img');
+      tri.setAttribute('aria-label', label);
+      tri.title = label;
+      return tri;
+    }
+
+    // 不可跳转的卡片标题上说明理由（R4）。按 bucket 取；approved 永远走链接那条分支。
+    var NAME_LINK_SKIP_TITLE = {
+      pending:  'Not on Explore yet — pending review',
+      rejected: 'Not on Explore — this submission was rejected',
+      hidden:   'Not on Explore — hidden submissions are private',
+      trash:    'Not on Explore — this submission is in Trash'
+    };
+
+    // /explore 的深链形状（R2）。country_id 可能为空 —— 那就整个省略 country 参数，
+    // 让 explore 的默认国家兜底，别拼出一个 country= 的空值。
+    function exploreHref(s) {
+      var href = '/explore?';
+      if (s.country_id) href += 'country=' + encodeURIComponent(s.country_id) + '&';
+      return href + 'region=' + encodeURIComponent(s.id);
+    }
+
+    // 第一行：标题，单行省略。**只有 approved 的卡标题是真链接**（R1/R3）——
+    // 整张卡不做点击穿透，所以不成整卡可点。
+    //
+    // 判据复用 submissionBucket：它的 approved 分支恰好等价于 /api/submissions 的
+    // 取数条件（status='approved' AND is_deleted=0 AND is_hidden=0），跳过去才接得住。
+    // **不要在这里自己拼一遍那三个条件** —— 那就成了第二个同步点。
+    // 代价是 submissionBucket 多了一个消费者，改它要想到这边。
+    function buildNameLine(s) {
+      var el = document.createElement('div');
+      el.className = 'review-item__name';
+      var name = s.name || '';
+      var key = submissionBucket(s).key;
+      if (key === 'approved') {
+        var a = document.createElement('a');
+        a.className = 'review-item__name-link';
+        a.href = exploreHref(s);
+        a.textContent = name;
+        // 后缀必须 .sr-only：无障碍名要**包含可见文字**（WCAG 2.5.3），
+        // 同时交代去处。它是 abspos，不参与行盒，省略号不受影响。
+        var suffix = document.createElement('span');
+        suffix.className = 'sr-only';
+        suffix.textContent = ' — view on Explore';
+        a.appendChild(suffix);
+        el.appendChild(a);
+      } else {
+        el.textContent = name;
+        el.title = NAME_LINK_SKIP_TITLE[key] || '';
+      }
+      return el;
+    }
+
+    function makeTagEl(text) {
+      var el = document.createElement('span');
+      el.className = 'review-item__tag';
+      el.textContent = typeof formatTagName === 'function' ? formatTagName(text) : text;
+      if (typeof formatTagFull === 'function') el.title = formatTagFull(text);
+      return el;
+    }
+
+    // 第二行：国旗（无旗则退回国家名文字）+ 标签 + 右端的通知 chip。
+    // chips 一律 flex:0 0 auto —— 优先级是**先丢标签、不丢通知**。
+    function buildLine2(s, chips) {
+      var line = document.createElement('div');
+      line.className = 'review-item__line2';
+
+      var countryName = countryNames[s.country_id] || s.country_id || 'South Africa';
+      var info = s.country_id ? (window._countryMap || {})[s.country_id] : null;
+      if (info && info.flag) {
+        // 国旗是装饰（alt="" + aria-hidden），国家名必须另挂在 title / aria-label 上 ——
+        // 否则只看得见一面旗，看不出是哪个国家。_countryMap 是异步到的，
+        // 数据未到或该国没有旗码时退回文字。
+        var img = document.createElement('img');
+        img.className = 'review-item__flag';
+        img.src = 'https://flagcdn.com/w40/' + info.flag + '.png';
+        img.alt = '';
+        img.title = countryName;
+        img.setAttribute('aria-label', countryName);
+        img.setAttribute('aria-hidden', 'true');
+        img.loading = 'lazy';
+        img.decoding = 'async';
+        line.appendChild(img);
+      } else {
+        var span = document.createElement('span');
+        span.className = 'review-item__country';
+        span.textContent = countryName;
+        line.appendChild(span);
+      }
+
+      var tags = document.createElement('div');
+      tags.className = 'review-item__tags';
+      // 完整标签表存在元素上（JS 属性，不进 DOM、不序列化）：缩窄丢标签之后
+      // 再拉宽要能长回来，所以裁剪前按它重建一次。
+      tags._all = Array.isArray(s.tags) ? s.tags.slice() : [];
+      tags._all.forEach(function(t) { tags.appendChild(makeTagEl(t)); });
+      line.appendChild(tags);
+
+      (chips || []).forEach(function(c) { line.appendChild(c); });
+      return line;
+    }
+
+    function makeNewTagChip(label) {
+      var el = document.createElement('span');
+      el.className = 'review-item__new-tag';
+      el.textContent = label;
+      return el;
+    }
+
+    // 第二行右端的「小胶囊」chip（Has pending edit / Hidden）。**刻意不复用 .status-badge**：
+    // prd 的 AC3 要求卡片里不再存在 .status-badge 元素（旧的状态胶囊下台了），
+    // 而这两个是标签之外的另一种东西。配色抄自 .status-badge--* 的同一组值。
+    function makeStatusChip(label, modifier) {
+      var el = document.createElement('span');
+      el.className = 'review-item__chip review-item__chip--' + modifier;
+      el.textContent = label;
+      return el;
+    }
+
+    // 第三行：正文，两行截断（沿用现状的 .review-item__desc）。
+    function buildDescLine(text) {
+      var el = document.createElement('div');
+      el.className = 'review-item__desc';
+      el.textContent = text || '';
+      return el;
+    }
+
+    // 第四行：左端「有 detailed description」标记、右端六项 reaction 的「图标 + 计数」。
+    // 两端各自可选，都空时整行不渲染。计数走 utils.js 的 buildReactionCounts ——
+    // 与 profile 收藏卡共用一份，**只渲染非零项**（D6）。
+    function buildMetaLine(s) {
+      var hasDetail = !!(s.detailed_description && String(s.detailed_description).trim());
+      var counts = buildReactionCounts(s);
+      if (!hasDetail && !counts) return null;
+
+      var meta = document.createElement('div');
+      meta.className = 'review-item__meta';
+      if (hasDetail) {
+        var d = document.createElement('span');
+        d.className = 'review-item__detail';
+        // 不是链接：本页没有详情视图，编辑入口是 Edit 按钮。
+        d.innerHTML = geoguideIconSvg(ICON_DETAIL) + '<span>Detailed description</span>';
+        meta.appendChild(d);
+      }
+      if (counts) {
+        counts.classList.add('review-item__counts');   // margin-left:auto → 贴右端
+        meta.appendChild(counts);
+      }
+      return meta;
+    }
+
+    function buildReasonLine(s) {
+      if (!(s.status === 'rejected' && s.reject_reason)) return null;
+      var el = document.createElement('div');
+      el.className = 'review-item__reason';
+      el.textContent = 'Reason: ' + s.reject_reason;
+      return el;
+    }
+
+    // 动作行。最后一个按钮由 CSS 的 :last-child 用 margin-left:auto 顶到右下角。
+    function buildActions(s, kinds, handlers) {
+      var actions = document.createElement('div');
+      actions.className = 'review-item__actions';
+      kinds.forEach(function(kind) {
+        var btn = (kind === 'download') ? makeDownloadButton(s) : makeIconButton(kind, s);
+        if (handlers && handlers[kind]) btn.addEventListener('click', handlers[kind]);
+        actions.appendChild(btn);
+      });
+      return actions;
+    }
+
+    function createSubmissionCard(s) {
+      var item = document.createElement('div');
+      item.className = 'review-item';
+      item.id = 'submission-' + s.id;
+      // 三角色随数据走，CSS 里写不出来 —— 走内联自定义属性，一条规则吃遍四种状态
+      //（四个 class 要维护四份几乎相同的几何）。缺值时兜底 pending，与旧徽章一致。
+      var statusKey = STATUS_FILL[s.status] ? s.status : 'pending';
+      item.style.setProperty('--status', STATUS_FILL[statusKey]);
+
+      var info = document.createElement('div');
+      info.className = 'review-item__info';
+      info.id = 'info-' + s.id;
+
+      var chips = [];
+
+      // "New" / "Edited" tag: show if this submission has unread notifications
+      // Guard with _pageNewIdsReady to avoid race: if notifications haven't
+      // loaded yet, cards rendered without tags will get them on next render.
+      if (_pageNewIdsReady && (s.status === 'approved' || s.status === 'rejected')) {
+        var noteType = pageNewIds[s.id];
+        if (noteType) chips.push(makeNewTagChip(noteType === 'edited' ? 'Edited by admin' : 'New'));
+      }
+
+      // Check if a pending draft exists for this submission
+      var pendingItems = submissionsCache[cacheKey('pending')] || [];
+      var hasDraft = pendingItems.some(function(other) {
+        return other.edit_target_id === s.id && other.status === 'pending';
+      });
+      if (hasDraft) chips.push(makeStatusChip('Has pending edit', 'pending'));
+
+      info.appendChild(buildNameLine(s));
+      info.appendChild(buildLine2(s, chips));
+      info.appendChild(buildDescLine(s.description));
+      var meta = buildMetaLine(s);
+      if (meta) info.appendChild(meta);
+      var reason = buildReasonLine(s);
+      if (reason) info.appendChild(reason);
+      appendSourceBadge(info, s);
+
+      var isApproved = (submissionBucket(s).key === 'approved');
+      var actionKinds = isApproved
+        ? ['edit', 'hide', 'delete', 'share', 'download']
+        : ['edit', 'hide', 'delete', 'download'];
+
+      info.appendChild(buildActions(s, actionKinds, {
+        edit: function(e) {
+          e.preventDefault();
+          window.location.href = '/submit?edit=' + s.id;
+        },
+        hide: function(e) {
+          e.preventDefault();
+          fetch('/api/user-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+            body: JSON.stringify({ action: 'hide', id: s.id })
+          }).then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.success) {
+                showToast('Submission hidden.', 'View', function() { switchVisibility('hidden'); });
+                s.is_hidden = 1;
+                moveInCache(s, 'hidden');
+              }
+            }).catch(function() { /* network issue */ });
+        },
+        delete: function(e) {
+          e.preventDefault();
+          customConfirm('Delete this submission? It will be moved to Trash and can be restored within 7 days.').then(function(ok) {
+            if (!ok) return;
+            fetch('/api/user-submissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+              body: JSON.stringify({ action: 'delete', id: s.id })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.success) {
+                  showToast('Moved to Trash.', 'View', function() { switchVisibility('trash'); });
+                  s.is_deleted = 1;
+                  s.deleted_at = new Date().toISOString();
+                  moveInCache(s, 'trash');
+                }
+              }).catch(function() { /* network issue */ });
+          });
+        },
+        share: function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          copyToClipboard(buildExploreShareUrl(s), function() {
+            showToast('Link copied to clipboard!');
+          }, function() {
+            showToast('Could not copy link to clipboard.');
+          });
+        },
+        download: function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleDownloadMenu(e.currentTarget, { id: s.id, name: s.name });
+        }
+      }));
+
+      // 三角在 DOM 里排最前（视觉上就在内容上方）。overflow:hidden 让它的直角
+      // 被卡片的圆角收掉 —— 见 style.css 那一节。
+      item.appendChild(makeStatusTriangle(STATUS_LABEL[statusKey]));
+      item.appendChild(info);
+
+      return item;
+    }
+
+    function createHiddenCard(s) {
+      var item = document.createElement('div');
+      item.className = 'review-item';
+      item.id = 'submission-' + s.id;
+      // 这里取 status 而不是 submissionBucket：那个函数会把 hidden 一律映射成灰色，
+      // 而 Hidden tab 上每张卡都是 hidden —— 灰色三角不携带任何信息，
+      // 状态（待审 / 通过 / 驳回）在这一页仍然有意义。
+      var statusKey = STATUS_FILL[s.status] ? s.status : 'pending';
+      item.style.setProperty('--status', STATUS_FILL[statusKey]);
+
+      var info = document.createElement('div');
+      info.className = 'review-item__info';
+
+      // Hidden 徽章保留，挪到第二行当作一个 chip（标题单行省略后它才不会被裁掉）。
+      var chips = [makeStatusChip('Hidden', 'hidden')];
+
+      info.appendChild(buildNameLine(s));
+      info.appendChild(buildLine2(s, chips));
+      info.appendChild(buildDescLine(s.description));
+      var meta = buildMetaLine(s);
+      if (meta) info.appendChild(meta);
+      appendSourceBadge(info, s);
+
+      // 下载图标**必须在**：导出契约覆盖 active 与 hidden 两个 tab
+      //（submission-export.md R1），只有 Trash 不可下载。放在最后 → CSS 的
+      // :last-child 把它顶到右下角，与 active 卡一致。
+      info.appendChild(buildActions(s, ['edit', 'unhide', 'download'], {
+        edit: function(e) {
+          e.preventDefault();
+          window.location.href = '/submit?edit=' + s.id;
+        },
+        download: function(e) {
+          e.preventDefault();
+          e.stopPropagation();
+          toggleDownloadMenu(e.currentTarget, { id: s.id, name: s.name });
+        },
+        unhide: function(e) {
+          e.preventDefault();
+          fetch('/api/user-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+            body: JSON.stringify({ action: 'unhide', id: s.id })
+          }).then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.success) {
+                showToast('Submission unhidden.', 'View', function() { goActiveAll(); });
+                s.is_hidden = 0;
+                moveInCache(s, 'all');
+              }
+            }).catch(function() {});
+        }
+      }));
+
+      item.appendChild(makeStatusTriangle(STATUS_LABEL[statusKey]));
+      item.appendChild(info);
+
+      return item;
+    }
+
+    function createTrashCard(s) {
+      var item = document.createElement('div');
+      item.className = 'review-item review-item--trash';
+      // trash 卡今天本来就不显示状态，三角一律走灰色那一档。
+      item.style.setProperty('--status', STATUS_FILL.trash);
+
+      var info = document.createElement('div');
+      info.className = 'review-item__info';
+
+      var deletedDate = '';
+      if (s.deleted_at) {
+        try {
+          // Format as "Deleted: Aug 7, 2026"
+          deletedDate = new Date(s.deleted_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch(e) { deletedDate = s.deleted_at; }
+      }
+
+      info.appendChild(buildNameLine(s));
+      info.appendChild(buildLine2(s, []));
+      info.appendChild(buildDescLine('Deleted: ' + deletedDate));
+      appendSourceBadge(info, s);
+
+      // **没有下载图标**：Trash 不可下载（submission-export.md 的契约，后端也返回 404）。
+      info.appendChild(buildActions(s, ['restore', 'delete'], {
+        restore: function(e) {
+          e.preventDefault();
+          fetch('/api/user-submissions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+            body: JSON.stringify({ action: 'restore', id: s.id })
+          }).then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (data.success) {
+                showToast('Submission restored.', 'View', function() { goActiveAll(); });
+                s.is_deleted = 0;
+                s.deleted_at = '';
+                moveInCache(s, 'all');
+              }
+            }).catch(function() {});
+        },
+        // delete 与 delete-forever 共用同一个桶字形（两者永不同屏）。
+        delete: function(e) {
+          e.preventDefault();
+          customConfirm('Permanently delete this submission? This cannot be undone.').then(function(ok) {
+            if (!ok) return;
+            fetch('/api/user-submissions', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+              body: JSON.stringify({ action: 'permanent-delete', id: s.id })
+            }).then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.success) {
+                  showToast('Submission permanently deleted.');
+                  moveInCache(s, null);
+                }
+              }).catch(function() {});
+          });
+        }
+      }));
+
+      item.appendChild(makeStatusTriangle(STATUS_LABEL.trash));
+      item.appendChild(info);
+      return item;
+    }
+
+
+    // ---- Map view ----
+
+    // 状态 → 色值。**唯一来源**：地图视图的图钉与卡片右上角的三角都读这里。
+    // 照抄一份就是第二个同步点，本仓库已经有 SOURCE_RULES 两份和 OSM 瓦片 URL 两个前车之鉴。
+    var STATUS_FILL = {
+      pending:  '#f4d35e',
+      approved: '#4a7c59',
+      rejected: '#c62828',
+      hidden:   '#8b8175',
+      trash:    '#a0988a'
+    };
+
+    // 状态 → 读屏 / 悬停用的词。三角没有可见文字，全靠这个（WCAG 1.4.1 不允许只用颜色）。
+    var STATUS_LABEL = {
+      pending:  'Pending',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      hidden:   'Hidden',
+      trash:    'Trash'
+    };
+
+    // Resolve a submission to its display bucket (Trash > Hidden > status).
+    // 色值走 STATUS_FILL；stroke 留在这里 —— 三角不描边，把它一起搬出去等于给不用的东西找个家。
+    function submissionBucket(s) {
+      if (Number(s.is_deleted) === 1) return { key: 'trash', label: 'Trash', fill: STATUS_FILL.trash, stroke: '#7a7265' };
+      if (Number(s.is_hidden) === 1) return { key: 'hidden', label: 'Hidden', fill: STATUS_FILL.hidden, stroke: '#655c50' };
+      if (s.status === 'approved') return { key: 'approved', label: 'Approved', fill: STATUS_FILL.approved, stroke: '#2d5a3d' };
+      if (s.status === 'rejected') return { key: 'rejected', label: 'Rejected', fill: STATUS_FILL.rejected, stroke: '#8e1b1b' };
+      return { key: 'pending', label: 'Pending', fill: STATUS_FILL.pending, stroke: '#c4a52a' };
+    }
+
+    // Normalize the geojson field to a Leaflet-consumable Feature/FeatureCollection.
+    // Returns null when the submission has no usable geometry.
+    function submissionGeometry(geo) {
+      var geometries;
+      if (Array.isArray(geo)) geometries = geo;
+      else if (geo && geo.type) geometries = [geo];
+      else return null;
+      var features = geometries.map(function(g) {
+        return { type: 'Feature', properties: {}, geometry: g };
+      });
+      if (features.length === 1) return features[0];
+      return { type: 'FeatureCollection', features: features };
+    }
+
+    // —— 微小提交圆点 + Point 图钉（与 explore 页 map.js 保持一致）——
+    // 屏幕外接框对角线小于此像素值时收成最小圆点
+    var DOT_THRESHOLD_PX = 12;
+    // Point 几何缩放阈值：zoom <= 此级别时图钉收成圆点
+    var POINT_DOT_ZOOM = 7;
+
+    function geometryScreenDiagonalPx(map, geom) {
+      var bbox = regionBBox(geom);
+      if (!bbox) return null;
+      var nw = map.latLngToContainerPoint([bbox.minLat, bbox.minLng]);
+      var se = map.latLngToContainerPoint([bbox.maxLat, bbox.maxLng]);
+      return Math.hypot(se.x - nw.x, se.y - nw.y);
+    }
+
+    function geometryCenter(geom) {
+      var bbox = regionBBox(geom);
+      if (!bbox) return null;
+      return [(bbox.minLat + bbox.maxLat) / 2, (bbox.minLng + bbox.maxLng) / 2];
+    }
+
+    function pointPinIcon(colors) {
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="40" viewBox="0 0 30 40">'
+        + '<path d="M15 1C7.3 1 1 7.3 1 15c0 10.6 14 24 14 24s14-13.4 14-24C29 7.3 22.7 1 15 1z" '
+        + 'fill="' + colors.fill + '" stroke="' + colors.stroke + '" stroke-width="1.5"/>'
+        + '<circle cx="15" cy="14" r="5" fill="#fff"/></svg>';
+      return L.divIcon({ className: 'region-point-pin', html: svg, iconSize: [30, 40], iconAnchor: [15, 40], tooltipAnchor: [0, -38] });
+    }
+
+    function setPointVisible(marker, show) {
+      marker.setOpacity(show ? 1 : 0);
+      var pe = marker.getElement && marker.getElement();
+      if (pe) pe.style.pointerEvents = show ? 'auto' : 'none';
+    }
+
+    // Simplified Leaflet init — no explore-page reset button (depends on _activeRegion)
+    function initMap() {
+      myMap = L.map('my-map', { minZoom: 2, zoomSnap: 0.25, worldCopyJump: true, renderer: L.canvas({ tolerance: 10 }) }).setView([0, 0], 2);
+      var osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        noWrap: false
+      }).addTo(myMap);
+      L.control.scale({ imperial: false, metric: true, position: 'bottomleft' }).addTo(myMap);
+
+      // 地图放大 / 收回。放在 topleft，与 Leaflet 自带的 +/- 同列（右上角留给底图切换）。
+      var ExpandControl = L.Control.extend({
+        options: { position: 'topleft' },
+        onAdd: function() {
+          var btn = L.DomUtil.create('button', 'map-expand-btn');
+          btn.type = 'button';
+          btn.innerHTML = ICON_EXPAND;
+          btn.title = 'Enlarge map';
+          btn.setAttribute('aria-label', 'Enlarge map');
+          btn.setAttribute('aria-expanded', 'false');
+          mapExpandBtn = btn;
+          L.DomEvent.disableClickPropagation(btn);
+          L.DomEvent.on(btn, 'click', function() {
+            var wrap = document.getElementById('my-map-wrap');
+            setMapLarge(!wrap.classList.contains('is-large'));
+          });
+          return btn;
+        }
+      });
+      myMap.addControl(new ExpandControl());
+
+      myMapLayers = L.layerGroup().addTo(myMap);
+      // 缩放结束后续点/图钉收拢状态（与 explore 页 map.js 的圆点逻辑保持一致）
+      myMap.on('zoomend', function() {
+        myMapSubmissionLayers.forEach(function(lyr) { refreshMyMapDot(lyr); });
+      });
+      // 底图切换（OSM ↔ Google 道路图）
+      if (typeof window.initBasemapSwitcher === 'function') {
+        window.initBasemapSwitcher(myMap, osmLayer);
+      }
+    }
+
+    // 按每个 feature 刷新「最小圆点」与 Point 图钉的显示：线与多边形缩得足够小时收成圆点，
+    // Point 在 zoom <= POINT_DOT_ZOOM 时收成圆点（图钉隐藏）。
+    function refreshMyMapDot(layer) {
+      layer.eachLayer(function(l) {
+        var dot = l._dot;
+        if (!dot) return;
+        var collapsed;
+        if (l._isPoint) {
+          collapsed = myMap.getZoom() <= POINT_DOT_ZOOM;
+        } else {
+          var feat = l.feature;
+          var diagPx = (feat && feat.geometry) ? geometryScreenDiagonalPx(myMap, feat.geometry) : null;
+          collapsed = diagPx != null && diagPx < DOT_THRESHOLD_PX;
+        }
+        if (collapsed) {
+          if (!myMapLayers.hasLayer(dot)) dot.addTo(myMapLayers);
+          if (l._isPoint) setPointVisible(l, false);
+        } else {
+          myMapLayers.removeLayer(dot);
+          if (l._isPoint) setPointVisible(l, true);
+        }
+      });
+    }
+
+    // Fetch all of the user's submissions and render them on the map.
+    //
+    // keepMap 区分两条调用路径，两者都满足「loading 和地图不同时出现」：
+    //   - 省略（进入地图视图）：地图上此刻什么都没有，藏掉它、只留 Loading，和列表视图的
+    //     loadTab()（loading 显示、内容隐藏，加载完再互换）同构。
+    //   - true（原地刷新：隐藏/删除后重画）：地图留着不动，**也不显示 Loading** ——
+    //     用户眼前已经有内容，把它藏起来再画回去只会白一下。
+    function loadMapSubmissions(keepMap) {
+      var mapLoading = document.getElementById('my-loading');
+      var mapError = document.getElementById('my-error');
+      var mapEl = document.getElementById('my-map');
+      // #my-loading 是列表视图和地图视图共用的同一个元素。以前这里只开 loading、不动地图，
+      // 于是整个 fetch 期间「Loading...」和地图同时可见（实测：接口 400ms 时并存 403ms）。
+      //
+      // 必须在 initMap() 之后再藏：#my-map 一旦 display:none，clientHeight 读出 0，
+      // Leaflet 会把尺寸记成 0，再显示出来就是一片空白（见 spec 的 invalidateSize 一节）。
+      // switchView() 是同步调用 initMap() 再调这里的，中间不发生绘制，所以不会闪。
+      if (!keepMap) {
+        mapEl.style.display = 'none';
+        mapLoading.style.display = 'block';
+      }
+      mapError.style.display = 'none';
+      fetch('/api/user-submissions?action=map')
+        .then(function(r) {
+          if (r.status === 401) throw new Error('auth');
+          if (!r.ok) return r.json().then(function(b) { throw new Error(b.error || 'Server error: ' + r.status); });
+          return r.json();
+        })
+        .then(function(data) {
+          // 请求飞行途中用户可能已经切回列表。不加这道闸，这里会把列表自己的 loading
+          // 关掉、还会把层画到一个已经隐藏的地图上。
+          if (currentView !== 'map') return;
+          if (!keepMap) {
+            mapLoading.style.display = 'none';
+            // 先让容器可见，再量尺寸 —— 反过来的话 invalidateSize() 读到的是 0。
+            mapEl.style.display = '';
+            myMap.invalidateSize();
+          }
+          myMapLayers.clearLayers();
+          myMapSubmissionLayers = [];
+          var subs = (data && data.submissions) || [];
+          var empty = document.getElementById('my-map-empty');
+          if (subs.length === 0) {
+            empty.style.display = 'block';
+            return; // 尺寸上面已经量过了
+          }
+          empty.style.display = 'none';
+          var bounds = L.latLngBounds([]);
+          subs.forEach(function(s) {
+            var geo = submissionGeometry(s.geojson);
+            if (!geo) return;
+            var bucket = submissionBucket(s);
+            var layer = L.geoJSON(geo, {
+              style: function() {
+                return {
+                  color: bucket.stroke,
+                  weight: computeLineWeight(myMap),
+                  fillColor: bucket.fill,
+                  fillOpacity: 0.55
+                };
+              },
+              pointToLayer: function(feat, latlng) {
+                var marker = L.marker(latlng, { icon: pointPinIcon(bucket), interactive: true });
+                marker._isPoint = true;
+                return marker;
+              },
+              onEachFeature: function(feat, l) {
+                if (feat.geometry) {
+                  var center = geometryCenter(feat.geometry);
+                  if (center) {
+                    var dot = L.circleMarker(center, {
+                      radius: 5,
+                      fillColor: bucket.fill,
+                      fillOpacity: 1,
+                      color: '#ffffff',
+                      weight: 1.5,
+                      opacity: 1,
+                      interactive: false
+                    });
+                    l._dot = dot;
+                  }
+                }
+              }
+            }).addTo(myMapLayers);
+            myMapSubmissionLayers.push(layer);
+            var tipContent = null;
+            layer.bindTooltip(function() {
+              if (!tipContent) tipContent = buildMapTooltip(s, bucket, layer);
+              return tipContent;
+            }, {
+              direction: 'top',
+              className: 'my-map-tooltip'
+            });
+            layer.off('mouseout', layer.closeTooltip);
+            layer.on('mouseover', function() {
+              clearTimeout(layer._mapCloseTimer);
+            });
+            layer.on('mouseout', function() {
+              layer._mapCloseTimer = setTimeout(function() { layer.closeTooltip(); }, 250);
+            });
+            bounds.extend(layer.getBounds());
+          });
+          if (bounds.isValid()) {
+            myMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
+          }
+          myMap.invalidateSize();
+          // fitBounds 视图落定后按最终 zoom 刷新圆点/图钉状态
+          myMap.once('moveend', function() {
+            myMapSubmissionLayers.forEach(function(lyr) { refreshMyMapDot(lyr); });
+          });
+        })
+        .catch(function(err) {
+          // 视图判断必须排在关 loading 之前：这一刻 #my-loading 可能正被列表视图用着，
+          // 先关掉它会把列表的加载态一起灭掉。原来的顺序反了（闸在关门之后）。
+          if (currentView !== 'map') return;
+          mapLoading.style.display = 'none';
+          if (err.message === 'auth') return;
+          // 原地刷新失败时留着旧内容（总比白板强）；进入地图视图失败则只留错误信息。
+          if (!keepMap) mapEl.style.display = 'none';
+          mapError.textContent = 'Failed to load map: ' + err.message;
+          mapError.style.display = 'block';
+        });
+    }
+
+    function buildMapTooltip(s, bucket, layer) {
+      var inner = document.createElement('div');
+      inner.className = 'my-map-tooltip__inner';
+
+      var head = document.createElement('div');
+      head.className = 'my-map-tooltip__head';
+
+      var title = document.createElement('strong');
+      title.textContent = s.name;
+      head.appendChild(title);
+
+      var moreBtn = document.createElement('button');
+      moreBtn.type = 'button';
+      moreBtn.className = 'my-map-tooltip__more';
+      moreBtn.textContent = '⋯';
+      moreBtn.setAttribute('aria-label', 'More actions');
+      head.appendChild(moreBtn);
+
+      inner.appendChild(head);
+
+      var meta = document.createElement('div');
+      meta.className = 'my-map-tooltip__meta';
+      var dot = document.createElement('span');
+      dot.style.cssText = 'display:inline-block;width:8px;height:8px;border-radius:50%;background:' + bucket.fill + ';margin-right:5px;vertical-align:middle;';
+      var catLabel = document.createElement('span');
+      catLabel.textContent = bucket.label;
+      catLabel.style.cssText = 'color:' + bucket.stroke + ';font-weight:700;';
+      meta.appendChild(dot);
+      meta.appendChild(catLabel);
+      meta.appendChild(document.createTextNode(' · ' + (countryNames[s.country_id] || s.country_id || '')));
+      inner.appendChild(meta);
+
+      var menu = document.createElement('div');
+      menu.className = 'my-map-tooltip__menu';
+      menu.hidden = true;
+      if (bucket.key === 'trash') {
+        menu.appendChild(makeMenuBtn('Restore', function() { restoreSubmission(s); }));
+      } else if (bucket.key === 'hidden') {
+        menu.appendChild(makeMenuBtn('Edit', function() { window.location.href = '/submit?edit=' + s.id; }));
+        menu.appendChild(makeMenuBtn('Unhide', function() { unhideSubmission(s); }));
+      } else {
+        menu.appendChild(makeMenuBtn('Edit', function() { window.location.href = '/submit?edit=' + s.id; }));
+        menu.appendChild(makeMenuBtn('Hide', function() { hideSubmission(s); }));
+        menu.appendChild(makeMenuBtn('Delete', function() { deleteSubmission(s); }));
+        if (bucket.key === 'approved') {
+          menu.appendChild(makeMenuBtn('Share link', function() {
+            copyToClipboard(buildExploreShareUrl(s), function() {
+              showToast('Link copied to clipboard!');
+            }, function() {
+              showToast('Could not copy link to clipboard.');
+            });
+            menu.hidden = true;
+          }));
+        }
+      }
+      inner.appendChild(menu);
+
+      moreBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        menu.hidden = !menu.hidden;
+      });
+
+      inner.addEventListener('mouseenter', function() { clearTimeout(layer._mapCloseTimer); });
+      inner.addEventListener('mouseleave', function() { layer.closeTooltip(); });
+
+      return inner;
+    }
+
+    function makeMenuBtn(label, onClick) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'my-map-tooltip__menuitem';
+      b.textContent = label;
+      b.addEventListener('click', onClick);
+      return b;
+    }
+
+    function hideSubmission(s) {
+      fetch('/api/user-submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+        body: JSON.stringify({ action: 'hide', id: s.id })
+      }).then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast('Submission hidden.', 'View', function() { switchView('list'); switchVisibility('hidden'); });
+            loadMapSubmissions(true); // 原地刷新：地图留着，也不闪 Loading
+          } else {
+            showToast(escapeHtml(data.error || 'Failed to hide.'));
+          }
+        }).catch(function() { /* network issue */ });
+    }
+
+    function deleteSubmission(s) {
+      customConfirm('Delete this submission? It will be moved to Trash and can be restored within 7 days.').then(function(ok) {
+        if (!ok) return;
+        fetch('/api/user-submissions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+          body: JSON.stringify({ action: 'delete', id: s.id })
+        }).then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (data.success) {
+              showToast('Moved to Trash.', 'View', function() { switchView('list'); switchVisibility('trash'); });
+              loadMapSubmissions(true); // 原地刷新：地图留着，也不闪 Loading
+            } else {
+              showToast(escapeHtml(data.error || 'Failed to delete.'));
+            }
+          }).catch(function() { /* network issue */ });
+      });
+    }
+
+    function unhideSubmission(s) {
+      fetch('/api/user-submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+        body: JSON.stringify({ action: 'unhide', id: s.id })
+      }).then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast('Submission unhidden.', 'View', function() { switchView('list'); goActiveAll(); });
+            loadMapSubmissions(true); // 原地刷新：地图留着，也不闪 Loading
+          } else {
+            showToast(escapeHtml(data.error || 'Failed to unhide.'));
+          }
+        }).catch(function() { /* network issue */ });
+    }
+
+    function restoreSubmission(s) {
+      fetch('/api/user-submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+        body: JSON.stringify({ action: 'restore', id: s.id })
+      }).then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            showToast('Submission restored.', 'View', function() { switchView('list'); goActiveAll(); });
+            loadMapSubmissions(true); // 原地刷新：地图留着，也不闪 Loading
+          } else {
+            showToast(escapeHtml(data.error || 'Failed to restore.'));
+          }
+        }).catch(function() { /* network issue */ });
+    }
+
+    // List/Map view toggle
+    function switchView(view) {
+      if (view === currentView) return;
+      currentView = view;
+      document.querySelectorAll('#view-tabs .review-tab').forEach(function(t) {
+        t.classList.toggle('is-active', t.dataset.view === view);
+      });
+      var controls = document.getElementById('controls-wrap');
+      var mapWrap = document.getElementById('my-map-wrap');
+      // 放大态会放宽 <main> 的 max-width，只在（且仅在地图视图下）生效，否则切回列表时
+      // 卡片会被地图的放大状态一起拉宽。这里**不**调 setMapLarge(false)：地图自己的放大
+      // 状态要留着（切回来还是放大的），而且此刻容器即将 display:none，
+      // invalidateSize() 会读到 0。
+      document.body.classList.toggle('is-map-view', view === 'map');
+      if (view === 'list') {
+        controls.style.display = '';
+        mapWrap.style.display = 'none';
+        loadTab(effectiveStatus(), currentPage);
+      } else {
+        controls.style.display = 'none';
+        document.getElementById('my-loading').style.display = 'none';
+        document.getElementById('my-results').style.display = 'none';
+        document.getElementById('my-pager').style.display = 'none';
+        document.getElementById('my-empty').style.display = 'none';
+        document.getElementById('my-error').style.display = 'none';
+        mapWrap.style.display = '';
+        // initMap() 必须在 #my-map 可见时跑，否则 Leaflet 量到的容器尺寸是 0。
+        // 它紧接着就会被 loadMapSubmissions() 藏起来等数据 —— 中间是同步的，不会闪。
+        var mapEl = document.getElementById('my-map');
+        mapEl.style.display = '';
+        if (!myMapInitialized) {
+          myMapInitialized = true;
+          try {
+            initMap();
+          } catch (e) {
+            mapEl.style.display = 'none'; // 初始化失败就只留错误信息，不留一张空地图
+            var initErr = document.getElementById('my-error');
+            initErr.textContent = 'Map failed to load. Please check your connection and reload the page.';
+            initErr.style.display = 'block';
+            return;
+          }
+        }
+        loadMapSubmissions();
+      }
+    }
+
+
+  </script>
+<script>(function(){var p=location.pathname;fetch('/api/pageview?page='+encodeURIComponent(p),{method:'POST'})})();</script>
+</body>
+</html>
