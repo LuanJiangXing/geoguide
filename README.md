@@ -4,7 +4,7 @@
 
 **Community-driven Interactive Geographic Atlas & Street View Meta Knowledge Base**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-orange.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Platform](https://img.shields.io/badge/Platform-Vercel-black.svg)](https://vercel.com)
 [![Database](https://img.shields.io/badge/Database-Turso%20LibSQL-00ED64.svg)](https://turso.tech)
 
@@ -147,7 +147,7 @@ geoguide/
   │   └── js/                # Modular vanilla JS components
   ├── scripts/               # Build and data processing scripts
   ├── .env.example           # Documented environment variable template
-  └── LICENSE                # MIT License
+  └── LICENSE                # CC BY-NC-SA 4.0 License
 ```
 
 ---
@@ -162,4 +162,6 @@ Contributions from the global geography and GeoGuessr community are welcome!
 
 ## 📄 License
 
-This project is open-source under the [MIT License](LICENSE).
+This project is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](LICENSE) license.
+
+> **Commercial use is strictly prohibited.** You are free to share and adapt the material for non-commercial purposes only, provided appropriate credit is given and derivative works are released under the same license.

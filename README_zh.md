@@ -4,7 +4,7 @@
 
 **面向地理发现与 GeoGuessr 竞技对战的社区共建交互式实战图鉴与知识库**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-orange.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 [![Platform](https://img.shields.io/badge/Platform-Vercel-black.svg)](https://vercel.com)
 [![Database](https://img.shields.io/badge/Database-Turso%20LibSQL-00ED64.svg)](https://turso.tech)
 
@@ -147,7 +147,7 @@ geoguide/
   │   └── js/                # 模块化纯原生 JavaScript 组件
   ├── scripts/               # 构建脚本、数据生成与自动化测试套件
   ├── .env.example           # 脱敏环境变量模板与注释说明
-  └── LICENSE                # MIT 开源许可证
+  └── LICENSE                # CC BY-NC-SA 4.0 非商业开源许可证
 ```
 
 ---
@@ -162,4 +162,6 @@ geoguide/
 
 ## 📄 开源许可证
 
-本项目基于 [MIT License](LICENSE) 开源。
+本项目基于 [知识共享 署名-非商业性使用-相同方式共享 4.0 国际许可协议 (CC BY-NC-SA 4.0)](LICENSE) 开源。
+
+> **严格禁止任何形式的商业用途。** 仅供个人非商业性学习、研究与交流使用；任何非商业衍生修改必须保留原作者署名，并以相同方式共享。
