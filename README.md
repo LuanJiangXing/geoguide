@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌍 GeoGuide
+# GeoGuide
 
 **Community-driven Interactive Geographic Atlas & Street View Meta Knowledge Base**
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 📌 Overview
+## Overview
 
 **GeoGuide** is an open-source, interactive web atlas designed for **GeoGuessr competitive players, street view navigators, and geography enthusiasts**.
 
@@ -26,26 +26,26 @@ Traditional GeoGuessr study materials rely on static, 100-page Google Docs and l
 
 ---
 
-## ✨ Key Features
+## Key Features
 
-- **🗺️ Interactive Macro World Map & Heatmap**
+- **Interactive Macro World Map & Heatmap**
   - Real-time global coverage heatmap showing region counts across documented countries.
   - Hover highlights with linked territorial relationships (e.g. Taiwan, Hong Kong, Macau integrated with China).
-- **📐 High-Precision Vector Boundaries**
+- **High-Precision Vector Boundaries**
   - **Polygons**: Golden-ratio color palette defining biomes, administrative divisions, and soil transitions.
   - **Polylines**: Highway and road infrastructure meta (bollards, dashed lines, guardrails).
   - **Dot Collapse**: Automatically collapses dense clusters into responsive pins at low zoom levels.
-- **👁️ 360° Street View with Historical Captures**
+- **360° Street View with Historical Captures**
   - Embedded Google Street View iframe supporting specific `pano` capture IDs (historical coverage).
   - Zero Google Maps JavaScript API quota burn on Street View navigation.
-- **🛡️ Graceful Zero-Key Out-of-the-Box Experience**
+- **Graceful Zero-Key Out-of-the-Box Experience**
   - Works **100% out of the box** on OpenStreetMap (CartoDB tiles) without any API key required.
   - If no Google Maps API key is configured, map browsing remains completely functional, with clear prompts to add an optional key for street view.
-- **🤝 Community Contribution & Review System**
+- **Community Contribution & Review System**
   - In-browser polygon/line editing and **KML / GeoJSON import**.
   - Review queue for community moderation (Approved, Changes Requested, Rejected).
-  - Community reaction system (🐐 GOAT, ❤️ Love, 👍 Helpful) and dynamic **Contributor Constellation** leaderboard.
-- **🔍 Study Toolkit & Deep Linking**
+  - Community reaction system (GOAT, Love, Helpful) and dynamic **Contributor Constellation** leaderboard.
+- **Study Toolkit & Deep Linking**
   - **Favorites Toolbar**: Sort by newest/oldest, filter by country with badge counts, and search by keyword.
   - **Compare Mode**: Side-by-side comparison of two easily confused road segments or regions.
   - **Instant Share Links**: Direct URLs (`/explore?country=...&region=...`) for instant post-game team debriefs.
@@ -53,7 +53,7 @@ Traditional GeoGuessr study materials rely on static, 100-page Google Docs and l
 
 ---
 
-## 🏗️ Architecture & Tech Stack
+## Architecture & Tech Stack
 
 GeoGuide is intentionally built with a lightweight, ultra-fast tech stack free of heavy frontend frameworks:
 
@@ -65,7 +65,7 @@ GeoGuide is intentionally built with a lightweight, ultra-fast tech stack free o
 
 ---
 
-## 🚀 Quick Start & Local Setup
+## Quick Start & Local Setup
 
 ### 1. Minimal Static Preview (No API Key Required)
 
@@ -127,32 +127,7 @@ npx vercel dev
 
 ---
 
-## 📁 Project Directory Structure
-
-```
-geoguide/
-  ├── api/                   # Vercel Serverless Functions (Node.js)
-  │   ├── _lib/              # Shared backend helpers (Turso, CSRF, OG generator)
-  │   ├── submissions.js     # Query & retrieve regional submissions
-  │   ├── submit.js          # Submit new geographic meta
-  │   ├── review.js          # Moderation queue & approval workflows
-  │   └── reactions.js       # User reactions & favorites
-  ├── public/                # Static frontend assets
-  │   ├── index.html         # Homepage, world heatmap, contributor constellation
-  │   ├── explore.html       # Core interactive map & split-screen Street View
-  │   ├── submit.html        # Geometry editor & KML import submission tool
-  │   ├── profile.html       # User profile, saved favorites, study search
-  │   ├── review.html        # Admin review dashboard
-  │   ├── css/style.css      # Design system & dark/light theme styles
-  │   └── js/                # Modular vanilla JS components
-  ├── scripts/               # Build and data processing scripts
-  ├── .env.example           # Documented environment variable template
-  └── LICENSE                # CC BY-NC-SA 4.0 License
-```
-
----
-
-## 🤝 Contributing
+## Contributing
 
 Contributions from the global geography and GeoGuessr community are welcome!
 - **Bug reports & Feature requests**: Please open an [Issue](https://github.com/LuanJiangXing/geoguide/issues).
@@ -160,7 +135,7 @@ Contributions from the global geography and GeoGuessr community are welcome!
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](LICENSE) license.
 

@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🌍 GeoGuide
+# GeoGuide
 
 **面向地理发现与 GeoGuessr 竞技对战的社区共建交互式实战图鉴与知识库**
 
@@ -14,7 +14,7 @@
 
 ---
 
-## 📌 项目定位与解决的痛点
+## 项目定位与解决的痛点
 
 **GeoGuide** 是一个开源的交互式地理图鉴与 Meta 知识库平台，专为 **GeoGuessr 竞技选手、街景探索者与地理科普爱好者** 设计。
 
@@ -26,26 +26,26 @@
 
 ---
 
-## ✨ 核心特色与功能模块
+## 核心特色与功能模块
 
-- **🗺️ 全球宏观热力地图 (World Heatmap)**
+- **全球宏观热力地图 (World Heatmap)**
   - 首页呈现矢量动态世界地图，直观反映各国家已收录的区域丰满度；
   - 鼠标悬停即时高亮并显示收录数量，支持领土联动（如中国地图联动台湾、香港、澳门高亮）。
-- **📐 高精度矢量图层体系 (Geometry Layers)**
+- **高精度矢量图层体系 (Geometry Layers)**
   - **彩色多边形 (Polygons)**：采用黄金比例色环着色，清晰界定土壤、植被过渡带或行政区域；
   - **公路折线 (Polylines)**：专为沿线特征（如公路反光标柱、护栏样式、路面虚线）定制的线条几何；
   - **聚散优化 (Dot Collapse)**：远景大比例尺下小区域自动聚拢为点标记，放大后平滑展为具体边界。
-- **👁️ 街景联动与历史全景穿梭 (Street View Embed)**
+- **街景联动与历史全景穿梭 (Street View Embed)**
   - 原生内嵌 Google Street View iframe，完整支持特定 `pano` 标识的历史街景捕获；
   - 零 Google Maps JavaScript API 配额消耗，无需担心高额账单。
-- **🛡️ 开箱即用与零 Key 优雅降级 (Zero-Key Out-of-the-Box)**
+- **开箱即用与零 Key 优雅降级 (Zero-Key Out-of-the-Box)**
   - 默认基于 **OpenStreetMap (CartoDB 瓦片)** 运行，**完全无需任何 API Key 即可 100% 正常缩放与浏览全站图鉴**；
   - 未配置 Google Key 时，街景区域提供清晰友好的自建 Key 指引，绝不会导致页面报错或死锁。
-- **🤝 社区共建、投稿与审核体系 (Community Co-creation)**
+- **社区共建、投稿与审核体系 (Community Co-creation)**
   - 内置便捷的在线多边形与折线绘制工具，支持 **KML / GeoJSON 一键导入**；
   - 完善的审核后台队列（已通过、需修改、已拒绝三态流转）；
-  - 社区勋章互动体系（🐐 GOAT、❤️ 喜欢、👍 实用）与动态 Canvas **贡献者星系画布**。
-- **🔍 专属复习工具箱与深度分享 (Study Toolkit)**
+  - 社区勋章互动体系（GOAT、喜欢、实用）与动态 Canvas **贡献者星系画布**。
+- **专属复习工具箱与深度分享 (Study Toolkit)**
   - **收藏夹工具栏**：支持按最新/最旧排序、按国家筛选（带条目统计）及实时关键词搜索；
   - **对比模式 (Compare Mode)**：同屏并排对比两处极易混淆的公路或地貌；
   - **深度分享直链**：支持一键复制精确直链（`/explore?country=...&region=...`），赛后直达街景同屏复盘；
@@ -53,7 +53,7 @@
 
 ---
 
-## 🏗️ 技术架构与技术栈
+## 技术架构与技术栈
 
 GeoGuide 坚持极轻量、快速加载的工程哲学，全站无重型前端打包工具绑架：
 
@@ -65,7 +65,7 @@ GeoGuide 坚持极轻量、快速加载的工程哲学，全站无重型前端�
 
 ---
 
-## 🚀 快速上手与本地运行
+## 快速上手与本地运行
 
 ### 方式一：轻量静态快速预览（无需任何 API Key）
 
@@ -127,32 +127,7 @@ npx vercel dev
 
 ---
 
-## 📁 目录结构说明
-
-```
-geoguide/
-  ├── api/                   # Vercel Serverless Functions 服务端接口
-  │   ├── _lib/              # 数据库连接、安全 CSRF、OG 图片生成等工具库
-  │   ├── submissions.js     # 地理数据查询接口
-  │   ├── submit.js          # 地理数据提交通道
-  │   ├── review.js          # 管理员审核与状态流转
-  │   └── reactions.js       # 表情互动与收藏夹接口
-  ├── public/                # 纯静态前端资源
-  │   ├── index.html         # 首页（全球热力地图、热门轮播、星系排行）
-  │   ├── explore.html       # 核心探索页（双栏笔记与街景漫游）
-  │   ├── submit.html        # 投稿录入页（在线勾绘与 KML 导入）
-  │   ├── profile.html       # 个人中心（收藏夹复盘与检索）
-  │   ├── review.html        # 社区审核控制台
-  │   ├── css/style.css      # 全站样式体系与暗黑模式适配
-  │   └── js/                # 模块化纯原生 JavaScript 组件
-  ├── scripts/               # 构建脚本、数据生成与自动化测试套件
-  ├── .env.example           # 脱敏环境变量模板与注释说明
-  └── LICENSE                # CC BY-NC-SA 4.0 非商业开源许可证
-```
-
----
-
-## 🤝 贡献与共建
+## 贡献与共建
 
 欢迎来自全球各地的地理发现者与 GeoGuessr 爱好者共同维护：
 - **提交问题或需求建议**：欢迎提交 [GitHub Issue](https://github.com/LuanJiangXing/geoguide/issues)；
@@ -160,7 +135,7 @@ geoguide/
 
 ---
 
-## 📄 开源许可证
+## 开源许可证
 
 本项目基于 [知识共享 署名-非商业性使用-相同方式共享 4.0 国际许可协议 (CC BY-NC-SA 4.0)](LICENSE) 开源。
 
